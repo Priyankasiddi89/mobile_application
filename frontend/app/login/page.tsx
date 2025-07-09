@@ -25,8 +25,18 @@ export default function LoginPage() {
       // Store tokens in localStorage (or cookies for production)
       localStorage.setItem("access_token", data.access);
       localStorage.setItem("refresh_token", data.refresh);
-      // Redirect to home or dashboard
-      router.push("/");
+      // Fetch user info to determine user_type
+      const userRes = await fetch("http://localhost:8000/api/auth/me/", {
+        headers: { Authorization: `Bearer ${data.access}` },
+      });
+      const user = await userRes.json();
+      if (user.user_type === "Service Provider") {
+        router.push("/service_provider_dashboard");
+      } else if (user.user_type === "Platform Provider" || user.user_type === "Admin") {
+        router.push("/platform_provider_dashboard");
+      } else {
+        router.push("/end_user_dashboard");
+      }
     } catch (err) {
       setError("Login failed. Please try again.");
     }

@@ -166,3 +166,114 @@ a.secondary {
     filter: invert();
   }
 }
+
+.providerDashboard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  min-height: 100vh;
+}
+
+.providerDashboardTitle {
+  font-size: 2.2rem;
+  font-weight: 700;
+  margin-bottom: 2rem;
+  color: #2d3748;
+  letter-spacing: 1px;
+}
+
+.requestCard {
+  background: #fff;
+  border-radius: 1rem;
+  box-shadow: 0 4px 24px rgba(44, 62, 80, 0.08);
+  padding: 1.5rem 2rem;
+  margin-bottom: 1.5rem;
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  transition: box-shadow 0.2s;
+}
+
+.requestCard:hover {
+  box-shadow: 0 8px 32px rgba(44, 62, 80, 0.16);
+}
+
+.requestHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.requestService {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #4a5568;
+}
+
+.requestCustomer {
+  font-size: 1rem;
+  color: #718096;
+}
+
+.requestDate {
+  font-size: 0.95rem;
+  color: #a0aec0;
+}
+
+.requestNotes {
+  font-size: 0.98rem;
+  color: #2d3748;
+  margin-top: 0.5rem;
+}
+
+.requestActions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.acceptBtn {
+  background: linear-gradient(90deg, #38b2ac 0%, #4299e1 100%);
+  color: #fff;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.6rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.acceptBtn:hover {
+  background: linear-gradient(90deg, #319795 0%, #2b6cb0 100%);
+}
+
+.declineBtn {
+  background: #e53e3e;
+  color: #fff;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.6rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.declineBtn:hover {
+  background: #c53030;
+}
+
+.statusAccepted {
+  color: #38a169;
+  font-weight: 700;
+}
+
+.statusPending {
+  color: #d69e2e;
+  font-weight: 700;
+}

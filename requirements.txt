@@ -1,17 +1,12 @@
 # Backend Python dependencies
-Django>=3.2
-# Add your other backend dependencies here
-# djangorestframework
-# djongo or pymongo (if using MongoDB)
+Django==3.2
+djangorestframework==3.12.4
+djangorestframework-simplejwt==4.8.0
+django-cors-headers==3.10.1
+mongoengine
+python-dotenv
+pytz
+PyJWT
 
 # Frontend dependencies are managed by npm in the frontend/ directory
 # See frontend/package.json for React/Next.js dependencies
-
-Django==3.2
-djangorestframework==3.12.4
-mongoengine
-python-dotenv
-djangorestframework-simplejwt==4.8.0
-pytz
-PyJWT
-django-cors-headers==3.10.1

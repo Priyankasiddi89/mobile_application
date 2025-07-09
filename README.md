@@ -5,6 +5,10 @@ This project is a full-stack web application for home services, featuring:
 - **Django** backend (with MongoDB)
 - **Next.js** frontend (React)
 - JWT authentication with user roles and types
+- **Dynamic service catalog** with categories and subcategories from database
+- **Quote request system** with detailed service requirements
+- **Booking management** for customers to view and track requests
+- **Role-based dashboards** for different user types
 
 ---
 
@@ -28,27 +32,72 @@ This project is a full-stack web application for home services, featuring:
 
 ---
 
+## Features
+
+### 🏠 End User Dashboard
+- **Home Services**: Browse categories and subcategories from database
+- **Quote Requests**: Submit detailed service requests with descriptions, addresses, and preferred dates/times
+- **My Requests**: View all submitted requests with status tracking
+- **Notifications**: Real-time updates and notifications
+- **Profile Management**: Update user information
+
+### 🔧 Service Provider Dashboard
+- **Service Management**: Manage available services and pricing
+- **Request Management**: View and respond to customer requests
+- **Booking Management**: Track confirmed bookings and schedules
+- **Analytics**: View performance metrics and earnings
+
+### 🎨 Modern UI/UX
+- **Responsive Design**: Works on desktop, tablet, and mobile
+- **Modern Styling**: Gradients, shadows, animations, and glassmorphism effects
+- **Interactive Elements**: Hover effects, smooth transitions, and loading states
+- **Real-time Notifications**: Success/error messages with auto-dismiss
+
+---
+
 ## Backend Setup (Django)
 
-1. **Install Python dependencies:**
+### Prerequisites
+- Python 3.9+
+- MongoDB database
+- Virtual environment (recommended)
+
+### Installation Steps
+
+1. **Create and activate virtual environment:**
+   ```sh
+   python -m venv venv
+   # On Windows:
+   venv\Scripts\activate
+   # On macOS/Linux:
+   source venv/bin/activate
+   ```
+
+2. **Install Python dependencies:**
    ```sh
    pip install -r requirements.txt
    ```
-2. **Set up your .env file:**
+
+3. **Set up your .env file:**
    ```env
    MONGO_URI=mongodb+srv://<username>:<password>@<cluster-url>/<dbname>?retryWrites=true&w=majority
    MONGO_DB_NAME=<dbname>
+   SECRET_KEY=your-secret-key-here
+   DEBUG=True
    ```
-3. **Apply migrations:**
+
+4. **Apply migrations:**
    ```sh
-   python manage.py makemigrations users
+   python manage.py makemigrations
    python manage.py migrate
    ```
-4. **Create a superuser (optional):**
+
+5. **Create a superuser (optional):**
    ```sh
    python manage.py createsuperuser
    ```
-5. **Run the backend server:**
+
+6. **Run the backend server:**
    ```sh
    python manage.py runserver
    ```
@@ -58,19 +107,55 @@ This project is a full-stack web application for home services, featuring:
 
 ## Frontend Setup (Next.js)
 
+### Prerequisites
+- Node.js 18+
+- npm or yarn
+
+### Installation Steps
+
 1. **Navigate to the frontend directory:**
    ```sh
    cd frontend
    ```
+
 2. **Install frontend dependencies:**
    ```sh
    npm install
    ```
+
 3. **Run the frontend development server:**
    ```sh
    npm run dev
    ```
    The app will be available at [http://localhost:3000](http://localhost:3000)
+
+---
+
+## Quick Start Guide
+
+### 1. Start Backend Server
+```sh
+# In the project root directory
+python manage.py runserver
+```
+
+### 2. Start Frontend Server
+```sh
+# In a new terminal, navigate to frontend directory
+cd frontend
+npm run dev
+```
+
+### 3. Access the Application
+- **Frontend**: [http://localhost:3000](http://localhost:3000)
+- **Backend API**: [http://localhost:8000](http://localhost:8000)
+- **Django Admin**: [http://localhost:8000/admin](http://localhost:8000/admin)
+
+### 4. Register and Test
+1. Go to [http://localhost:3000](http://localhost:3000)
+2. Click "Sign Up" and create an End User account
+3. Login and explore the dashboard
+4. Browse services and submit quote requests
 
 ---
 
@@ -80,66 +165,27 @@ This project is a full-stack web application for home services, featuring:
   - User type and role are selected via dropdowns
   - Only End User and Service Provider types are available for registration
 
+## Service System
+- **Dynamic Categories**: Categories and subcategories are loaded from the database
+- **Quote Requests**: Submit detailed requests with descriptions, addresses, and preferred dates/times
+- **Status Tracking**: Track request status (pending, confirmed, completed, cancelled)
+- **Real-time Updates**: Get notifications for request status changes
+
 ---
 
 ## API Endpoints (Backend)
 
-### Register
+### Authentication Endpoints
+
+#### Register
 - **POST** `/api/auth/register/`
 - **Request Body:**
   ```json
   {
     "username": "alice",
     "password": "mypassword",
-    "user_type": "Service Provider",
-    "role": "Admin"
-  }
-  ```
-
-### Login
-- **POST** `/api/auth/login/`
-- **Request Body:**
-  ```json
-  {
-    "username": "alice",
-    "password": "mypassword"
-  }
-  ```
-
-### Other Endpoints
-- `/api/auth/logout/` (POST)
-- `/api/auth/me/` (GET, JWT required)
-- `/api/auth/users/` (GET, JWT required)
-
----
-
-## Troubleshooting
-- Ensure both backend and frontend servers are running.
-- Use Node.js 18.18.0 or higher for the frontend.
-- Use Python 3.8+ for the backend.
-- If you get 404 errors for API endpoints, check your Django `urls.py` configuration.
-- For CORS issues, ensure Django CORS headers are configured if accessing from a different port.
-
----
-
-## Notes
-- Backend dependencies are in `requirements.txt`.
-- Frontend dependencies are managed by npm in `frontend/package.json`.
-- All endpoints except `/api/auth/register/` and `/api/auth/login/` require a valid JWT access token in the `Authorization` header.
-
----
-
-## API Endpoints
-
-### 1. Register
-- **POST** `/api/auth/register/`
-- **Request Body (JSON):**
-  ```json
-  {
-    "username": "alice",
-    "password": "mypassword",
-    "user_type": "Service Provider",
-    "role": "Admin"
+    "user_type": "End User",
+    "role": "Head of House"
   }
   ```
 - **Response:**
@@ -147,9 +193,9 @@ This project is a full-stack web application for home services, featuring:
   { "msg": "User registered successfully" }
   ```
 
-### 2. Login
+#### Login
 - **POST** `/api/auth/login/`
-- **Request Body (JSON):**
+- **Request Body:**
   ```json
   {
     "username": "alice",
@@ -161,76 +207,53 @@ This project is a full-stack web application for home services, featuring:
   {
     "refresh": "<refresh_token>",
     "access": "<access_token>",
-    "user_type": "Service Provider",
-    "role": "Admin"
+    "user_type": "End User",
+    "role": "Head of House"
   }
   ```
 
-### 3. Get Current User
-- **GET** `/api/current_user/`
-- **Headers:**
-  - `Authorization: Bearer <access_token>`
-- **Response:**
+#### Other Auth Endpoints
+- `/api/auth/logout/` (POST)
+- `/api/auth/me/` (GET, JWT required)
+- `/api/auth/users/` (GET, JWT required)
+
+### Service Endpoints
+
+#### Get Service Categories
+- **GET** `/api/bookings/categories/`
+- **Response:** List of all service categories
+
+#### Get Service Subcategories
+- **GET** `/api/bookings/subcategories/`
+- **Response:** List of all subcategories with category information
+
+### Booking Endpoints
+
+#### Create Booking (Quote Request)
+- **POST** `/api/bookings/create/` (JWT required)
+- **Request Body:**
   ```json
   {
-    "id": 1,
-    "username": "alice",
-    "user_type": "Service Provider",
-    "role": "Admin",
-    "is_active": true
+    "subcategory_id": "subcategory_id",
+    "service_date": "2024-01-15T10:00:00Z",
+    "notes": "Description: Need deep cleaning\nAddress: 123 Main St"
   }
   ```
+- **Response:** Created booking details
 
-### 4. Get All Active Users
-- **GET** `/api/active_users/`
-- **Headers:**
-  - `Authorization: Bearer <access_token>`
-- **Response:**
-  ```json
-  [
-    {
-      "id": 1,
-      "username": "alice",
-      "user_type": "Service Provider",
-      "role": "Admin",
-      "is_active": true
-    },
-    ...
-  ]
-  ```
+#### Get User Bookings
+- **GET** `/api/bookings/user-bookings/` (JWT required)
+- **Response:** List of all bookings for the authenticated user
 
-### 5. Get All Users
-- **GET** `/api/all_users/`
-- **Headers:**
-  - `Authorization: Bearer <access_token>`
-- **Response:**
-  ```json
-  [
-    {
-      "id": 1,
-      "username": "alice",
-      "user_type": "Service Provider",
-      "role": "Admin",
-      "is_active": true
-    },
-    ...
-  ]
-  ```
-
-### 6. Protected Endpoint Example
-- **GET** `/api/protected-endpoint/`
-- **Headers:**
-  - `Authorization: Bearer <access_token>`
-- **Response (if allowed):**
+#### Update Booking Status
+- **PUT** `/api/bookings/booking/<booking_id>/` (JWT required)
+- **Request Body:**
   ```json
   {
-    "msg": "Hello, alice! You are a Admin in Service Provider."
+    "status": "cancelled"
   }
   ```
-- **Response (if not allowed):**
-  ```json
-  { "detail": "You do not have permission to access this endpoint." }
-  ```
+- **Response:** Updated booking details
 
 ---
 
@@ -240,7 +263,7 @@ This project is a full-stack web application for home services, featuring:
 ```sh
 curl -X POST http://localhost:8000/api/auth/register/ \
   -H "Content-Type: application/json" \
-  -d '{"username": "alice", "password": "mypassword", "user_type": "Service Provider", "role": "Admin"}'
+  -d '{"username": "alice", "password": "mypassword", "user_type": "End User", "role": "Head of House"}'
 ```
 
 ### Login
@@ -252,24 +275,102 @@ curl -X POST http://localhost:8000/api/auth/login/ \
 
 ### Get Current User
 ```sh
-curl -X GET http://localhost:8000/api/current_user/ \
+curl -X GET http://localhost:8000/api/auth/me/ \
   -H "Authorization: Bearer <access_token>"
 ```
 
-### Get All Active Users
+### Get Service Categories
 ```sh
-curl -X GET http://localhost:8000/api/active_users/ \
-  -H "Authorization: Bearer <access_token>"
+curl -X GET http://localhost:8000/api/bookings/categories/
 ```
 
-### Get All Users
+### Get Service Subcategories
 ```sh
-curl -X GET http://localhost:8000/api/all_users/ \
-  -H "Authorization: Bearer <access_token>"
+curl -X GET http://localhost:8000/api/bookings/subcategories/
 ```
 
-### Protected Endpoint
-```sh
-curl -X GET http://localhost:8000/api/protected-endpoint/ \
-  -H "Authorization: Bearer <access_token>"
-``` 
+---
+
+## Database Schema
+
+### Users
+- `id`: ObjectId
+- `username`: String (unique)
+- `password`: String (hashed)
+- `user_type`: String (End User, Service Provider, Platform Provider)
+- `role`: String (varies by user_type)
+- `is_active`: Boolean
+
+### Service Categories
+- `id`: ObjectId
+- `name`: String
+- `description`: String
+- `icon`: String
+
+### Service Subcategories
+- `id`: ObjectId
+- `name`: String
+- `description`: String
+- `category`: ObjectId (reference to ServiceCategory)
+- `price`: Decimal
+
+### Bookings
+- `id`: ObjectId
+- `user`: ObjectId (reference to User)
+- `subcategory`: ObjectId (reference to ServiceSubcategory)
+- `service_date`: DateTime
+- `status`: String (pending, confirmed, completed, cancelled)
+- `notes`: String
+- `created_at`: DateTime
+- `updated_at`: DateTime
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+1. **MongoDB Connection Error**
+   - Check your `.env` file and ensure `MONGO_URI` is correct
+   - Verify MongoDB is running and accessible
+
+2. **Frontend Not Loading Services**
+   - Ensure backend server is running on port 8000
+   - Check browser console for CORS errors
+   - Verify API endpoints are accessible
+
+3. **Authentication Issues**
+   - Clear browser localStorage and try logging in again
+   - Check if JWT tokens are being stored correctly
+
+4. **Port Already in Use**
+   - Backend: Change port in `manage.py runserver 8001`
+   - Frontend: Change port in `package.json` scripts
+
+### Development Tips
+
+1. **Backend Development**
+   - Use Django's built-in admin interface for data management
+   - Check Django logs for detailed error messages
+   - Use `python manage.py shell` for database queries
+
+2. **Frontend Development**
+   - Use browser dev tools to debug API calls
+   - Check Network tab for request/response details
+   - Use React dev tools for component debugging
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+---
+
+## License
+
+This project is licensed under the MIT License. 

@@ -19,4 +19,8 @@ from django.urls import path, include
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/auth/', include('authentication.urls')),
+    path('api/bookings/', include('bookings.urls')),
+    path('api/end_user_dashboard/', include('end_user_dashboard.urls')),
+    path('api/service_provider_dashboard/', include('service_provider.dashboard.urls')),
+    path('api/platform_provider_dashboard/', include('platform_provider_dashboard.urls')),
 ]
