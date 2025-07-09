@@ -68,7 +68,7 @@ This project is a full-stack web application for home services, featuring:
    ```
 3. **Run the frontend development server:**
    ```sh
-   npm run dev
+   npx next dev
    ```
    The app will be available at [http://localhost:3000](http://localhost:3000)
 
