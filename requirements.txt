@@ -1,0 +1,7 @@
+Django==3.2
+djangorestframework==3.12.4
+mongoengine
+python-dotenv
+djangorestframework-simplejwt==4.8.0
+pytz
+PyJWT
