@@ -1,8 +1,36 @@
-# Django Authentication API (MongoDB)
+# Home Services App: Django Backend & Next.js Frontend
 
-## Setup
+## Project Overview
+This project is a full-stack web application for home services, featuring:
+- **Django** backend (with MongoDB)
+- **Next.js** frontend (React)
+- JWT authentication with user roles and types
 
-1. **Install dependencies:**
+---
+
+## User Structure
+```
+├── End User
+│   ├── Head of House
+│   └── Family Member
+│
+├── Service Provider
+│   ├── Admin
+│   ├── Employee
+│   └── Supervisor
+│
+└── Platform Provider (Hidden)
+    ├── Admin
+    ├── Employee
+    └── Service Desk
+```
+*Platform Provider is not available in the UI for registration.*
+
+---
+
+## Backend Setup (Django)
+
+1. **Install Python dependencies:**
    ```sh
    pip install -r requirements.txt
    ```
@@ -20,17 +48,91 @@
    ```sh
    python manage.py createsuperuser
    ```
-5. **Run the server:**
+5. **Run the backend server:**
    ```sh
    python manage.py runserver
    ```
+   The backend will be available at [http://localhost:8000](http://localhost:8000)
+
+---
+
+## Frontend Setup (Next.js)
+
+1. **Navigate to the frontend directory:**
+   ```sh
+   cd frontend
+   ```
+2. **Install frontend dependencies:**
+   ```sh
+   npm install
+   ```
+3. **Run the frontend development server:**
+   ```sh
+   npm run dev
+   ```
+   The app will be available at [http://localhost:3000](http://localhost:3000)
+
+---
+
+## Authentication Flow
+- **Login:** `/login` (username, password)
+- **Sign Up:** `/signup` (username, password, user type, role)
+  - User type and role are selected via dropdowns
+  - Only End User and Service Provider types are available for registration
+
+---
+
+## API Endpoints (Backend)
+
+### Register
+- **POST** `/api/auth/register/`
+- **Request Body:**
+  ```json
+  {
+    "username": "alice",
+    "password": "mypassword",
+    "user_type": "Service Provider",
+    "role": "Admin"
+  }
+  ```
+
+### Login
+- **POST** `/api/auth/login/`
+- **Request Body:**
+  ```json
+  {
+    "username": "alice",
+    "password": "mypassword"
+  }
+  ```
+
+### Other Endpoints
+- `/api/auth/logout/` (POST)
+- `/api/auth/me/` (GET, JWT required)
+- `/api/auth/users/` (GET, JWT required)
+
+---
+
+## Troubleshooting
+- Ensure both backend and frontend servers are running.
+- Use Node.js 18.18.0 or higher for the frontend.
+- Use Python 3.8+ for the backend.
+- If you get 404 errors for API endpoints, check your Django `urls.py` configuration.
+- For CORS issues, ensure Django CORS headers are configured if accessing from a different port.
+
+---
+
+## Notes
+- Backend dependencies are in `requirements.txt`.
+- Frontend dependencies are managed by npm in `frontend/package.json`.
+- All endpoints except `/api/auth/register/` and `/api/auth/login/` require a valid JWT access token in the `Authorization` header.
 
 ---
 
 ## API Endpoints
 
 ### 1. Register
-- **POST** `/api/register/`
+- **POST** `/api/auth/register/`
 - **Request Body (JSON):**
   ```json
   {
@@ -46,7 +148,7 @@
   ```
 
 ### 2. Login
-- **POST** `/api/login/`
+- **POST** `/api/auth/login/`
 - **Request Body (JSON):**
   ```json
   {
@@ -136,14 +238,14 @@
 
 ### Register
 ```sh
-curl -X POST http://localhost:8000/api/register/ \
+curl -X POST http://localhost:8000/api/auth/register/ \
   -H "Content-Type: application/json" \
   -d '{"username": "alice", "password": "mypassword", "user_type": "Service Provider", "role": "Admin"}'
 ```
 
 ### Login
 ```sh
-curl -X POST http://localhost:8000/api/login/ \
+curl -X POST http://localhost:8000/api/auth/login/ \
   -H "Content-Type: application/json" \
   -d '{"username": "alice", "password": "mypassword"}'
 ```
@@ -170,11 +272,4 @@ curl -X GET http://localhost:8000/api/all_users/ \
 ```sh
 curl -X GET http://localhost:8000/api/protected-endpoint/ \
   -H "Authorization: Bearer <access_token>"
-```
-
----
-
-## Notes
-- All endpoints except `/api/register/` and `/api/login/` require a valid JWT access token in the `Authorization` header.
-- User roles and types are validated according to the defined structure in the code.
-- The `is_active` field is only visible in the database and user info endpoints. 
+``` 
