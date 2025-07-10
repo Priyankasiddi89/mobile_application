@@ -38,31 +38,26 @@ function EndUserSidebar({ user }: { user: User }) {
 
   const menuItems = [
     {
-      title: "Home Services",
-      path: "/end_user_dashboard/services",
+      title: "Home",
+      path: "/end_user_dashboard",
       icon: "🏠"
+    },
+    {
+      title: "Book a Service",
+      path: "/end_user_dashboard/services",
+      icon: "🔧"
     },
     {
       title: "My Requests",
       path: "/end_user_dashboard/requests",
       icon: "📝"
-    },
-    {
-      title: "Notifications",
-      path: "/end_user_dashboard/notifications",
-      icon: "🔔"
-    },
-    {
-      title: "Profile",
-      path: "/end_user_dashboard/profile",
-      icon: "👤"
     }
   ];
 
   return (
     <div style={{
       width: 280,
-      background: 'linear-gradient(135deg, #1e3c72 0%, #2a5298 100%)',
+      background: 'linear-gradient(135deg,rgb(18, 49, 103) 0%, #2a5298 100%)',
       padding: '32px 24px',
       height: '100vh',
       position: 'fixed',
@@ -87,42 +82,38 @@ function EndUserSidebar({ user }: { user: User }) {
           boxShadow: '0 8px 25px rgba(0,0,0,0.2)',
           border: '2px solid rgba(255,255,255,0.2)'
         }}>
-          🏠
+          👤
         </div>
-        <h2 style={{ color: 'white', margin: 0, fontSize: '1.4rem', fontWeight: 700, textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>Home Services</h2>
-        <p style={{ color: 'rgba(255,255,255,0.9)', margin: '8px 0 0 0', fontSize: '0.9rem', fontWeight: 500 }}>End User Dashboard</p>
+        <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0 0 8px 0', fontSize: '0.8rem', fontWeight: 500 }}>{user.username}</p>
+        <div 
+          onClick={() => router.push('/end_user_dashboard/profile')}
+          style={{ 
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            margin: '8px 0',
+            textAlign: 'center'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'rgba(135, 206, 235, 0.2)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'transparent';
+          }}
+        >
+          <p style={{ 
+            color: '#87CEEB', 
+            margin: 0, 
+            fontSize: '0.9rem', 
+            fontWeight: 500, 
+            textDecoration: 'underline',
+            textAlign: 'center'
+          }}>My Profile</p>
+        </div>
       </div>
 
-      {/* User Info */}
-      <div style={{ 
-        background: 'rgba(255,255,255,0.08)', 
-        borderRadius: 16, 
-        padding: 20, 
-        marginBottom: 32,
-        border: '1px solid rgba(255,255,255,0.15)',
-        backdropFilter: 'blur(10px)'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <div style={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
-            width: 45, 
-            height: 45, 
-            borderRadius: '50%', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            fontSize: '1.3rem',
-            marginRight: 15,
-            boxShadow: '0 4px 15px rgba(0,0,0,0.2)'
-          }}>
-            👤
-          </div>
-          <div>
-            <h4 style={{ color: 'white', margin: 0, fontSize: '1.1rem', fontWeight: 600, textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>{user.username}</h4>
-            <p style={{ color: 'rgba(255,255,255,0.8)', margin: '4px 0 0 0', fontSize: '0.85rem', fontWeight: 500 }}>End User</p>
-          </div>
-        </div>
-      </div>
+
 
       {/* Navigation Menu */}
       <nav>
@@ -172,7 +163,7 @@ function EndUserSidebar({ user }: { user: User }) {
       </nav>
 
       {/* Logout Button */}
-      <div style={{ marginTop: 'auto', paddingTop: 32 }}>
+      <div style={{ marginTop: 'auto', paddingTop: 0 }}>
         <button
           onClick={() => {
             localStorage.removeItem("access_token");
@@ -191,7 +182,7 @@ function EndUserSidebar({ user }: { user: User }) {
             transition: 'all 0.3s ease',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
+            justifyContent: 'left',
             backdropFilter: 'blur(10px)'
           }}
           onMouseEnter={e => {
@@ -330,7 +321,7 @@ function MainDashboard({ user }: { user: User }) {
       title: "🏠 Home Services",
       description: "Browse and book home services",
       icon: "🏠",
-      gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+      gradient: "linear-gradient(135deg,rgb(147, 164, 239) 0%, #764ba2 100%)",
       onClick: () => router.push("/end_user_dashboard/services")
     },
     {
@@ -378,13 +369,13 @@ function MainDashboard({ user }: { user: User }) {
 
   return (
     <div style={{ 
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+      background: 'linear-gradient(135deg,rgb(73, 100, 218) 0%, #764ba2 100%)', 
       borderRadius: 25, 
-      padding: 50, 
+      padding: 30, 
       maxWidth: 1200, 
       margin: '0 auto', 
       boxShadow: '0 25px 50px rgba(0,0,0,0.15)',
-      minHeight: '80vh',
+      height: 'calc(100vh - 100px)',
       position: 'relative',
       overflow: 'hidden'
     }}>
@@ -410,26 +401,26 @@ function MainDashboard({ user }: { user: User }) {
         filter: 'blur(30px)'
       }}></div>
 
-      <div style={{ textAlign: 'center', marginBottom: 50, position: 'relative', zIndex: 1 }}>
+      <div style={{ textAlign: 'center', marginBottom: 30, position: 'relative', zIndex: 1 }}>
         <div style={{
           background: 'rgba(255,255,255,0.2)',
-          width: 80,
-          height: 80,
+          width: 60,
+          height: 60,
           borderRadius: '50%',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: '3rem',
-          margin: '0 auto 20px',
+          fontSize: '2rem',
+          margin: '0 auto 15px',
           backdropFilter: 'blur(10px)',
           border: '1px solid rgba(255,255,255,0.3)'
         }}>
           👋
         </div>
         <h1 style={{ 
-          fontSize: '3.5rem', 
+          fontSize: '2.5rem', 
           fontWeight: 900, 
-          marginBottom: 16, 
+          marginBottom: 12, 
           color: 'white',
           textShadow: '0 4px 8px rgba(0,0,0,0.3)',
           background: 'linear-gradient(45deg, #fff, #f0f0f0)',
@@ -438,26 +429,26 @@ function MainDashboard({ user }: { user: User }) {
         }}>Welcome Back!</h1>
         <p style={{ 
           color: 'rgba(255,255,255,0.9)', 
-          fontSize: '1.3rem', 
+          fontSize: '1rem', 
           marginBottom: 0,
           fontWeight: 500
         }}>What would you like to do today?</p>
       </div>
 
       {/* Main Options */}
-      <div style={{ marginBottom: 60, position: 'relative', zIndex: 1 }}>
+      <div style={{ marginBottom: 30, position: 'relative', zIndex: 1 }}>
         <h2 style={{ 
-          fontSize: '2.5rem', 
+          fontSize: '1.8rem', 
           fontWeight: 800, 
-          marginBottom: 30, 
+          marginBottom: 20, 
           color: 'white', 
           textAlign: 'center',
           textShadow: '0 2px 4px rgba(0,0,0,0.3)'
         }}>Quick Actions</h2>
         <div style={{ 
           display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', 
-          gap: 30 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
+          gap: 20 
         }}>
           {mainOptions.map((option, index) => (
             <div
@@ -465,8 +456,8 @@ function MainDashboard({ user }: { user: User }) {
               onClick={option.onClick}
               style={{
                 background: option.gradient,
-                borderRadius: 25,
-                padding: 40,
+                borderRadius: 20,
+                padding: 25,
                 cursor: 'pointer',
                 transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
                 boxShadow: '0 15px 35px rgba(0,0,0,0.2)',
@@ -486,33 +477,33 @@ function MainDashboard({ user }: { user: User }) {
             >
               <div style={{ 
                 background: 'rgba(255,255,255,0.25)', 
-                width: 80, 
-                height: 80, 
+                width: 60, 
+                height: 60, 
                 borderRadius: '50%', 
                 display: 'flex', 
                 alignItems: 'center', 
                 justifyContent: 'center', 
-                fontSize: '2.5rem',
-                marginBottom: 25,
+                fontSize: '2rem',
+                marginBottom: 15,
                 backdropFilter: 'blur(10px)',
                 border: '1px solid rgba(255,255,255,0.3)'
               }}>
                 {option.icon}
               </div>
               <h3 style={{ 
-                margin: '0 0 15px 0', 
+                margin: '0 0 10px 0', 
                 color: 'white', 
-                fontSize: '1.8rem', 
+                fontSize: '1.4rem', 
                 fontWeight: 800,
-                textShadow: '0 2px 4px rgba(0,0,0,0.3)'
+                textShadow: '0 2px 4px rgba(16, 16, 16, 0.3)'
               }}>
                 {option.title}
               </h3>
               <p style={{ 
                 margin: 0, 
                 color: 'rgba(255,255,255,0.95)', 
-                fontSize: '1.1rem', 
-                lineHeight: 1.6,
+                fontSize: '0.9rem', 
+                lineHeight: 1.4,
                 fontWeight: 500
               }}>
                 {option.description}
@@ -522,80 +513,7 @@ function MainDashboard({ user }: { user: User }) {
         </div>
       </div>
 
-      {/* Service Categories */}
-      <div style={{ position: 'relative', zIndex: 1 }}>
-        <h2 style={{ 
-          fontSize: '2.5rem', 
-          fontWeight: 800, 
-          marginBottom: 30, 
-          color: 'white', 
-          textAlign: 'center',
-          textShadow: '0 2px 4px rgba(0,0,0,0.3)'
-        }}>Popular Services</h2>
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
-          gap: 25 
-        }}>
-          {categories.map((category, index) => (
-            <div
-              key={index}
-              onClick={() => router.push("/end_user_dashboard/services")}
-              style={{
-                background: category.gradient,
-                borderRadius: 20,
-                padding: 30,
-                cursor: 'pointer',
-                transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
-                border: '1px solid rgba(255,255,255,0.2)',
-                backdropFilter: 'blur(10px)'
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.transform = 'translateY(-8px) scale(1.03)';
-                e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.25)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                e.currentTarget.style.boxShadow = '0 10px 25px rgba(0,0,0,0.15)';
-              }}
-            >
-              <div style={{ 
-                background: 'rgba(255,255,255,0.25)', 
-                width: 70, 
-                height: 70, 
-                borderRadius: '50%', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                fontSize: '2rem',
-                marginBottom: 20,
-                backdropFilter: 'blur(10px)',
-                border: '1px solid rgba(255,255,255,0.3)'
-              }}>
-                {category.icon}
-              </div>
-              <h4 style={{ 
-                margin: '0 0 12px 0', 
-                color: '#333', 
-                fontSize: '1.4rem', 
-                fontWeight: 700 
-              }}>
-                {category.name}
-              </h4>
-              <p style={{ 
-                margin: 0, 
-                color: '#555', 
-                fontSize: '1rem', 
-                lineHeight: 1.5,
-                fontWeight: 500
-              }}>
-                {category.description}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
+
     </div>
   );
 }
@@ -854,12 +772,12 @@ function RequestsSection({ user }: { user: User }) {
 
         </div>
       ) : (
-        <div style={{ display: 'grid', gap: '25px', position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'grid', gap: '15px', position: 'relative', zIndex: 1 }}>
           {requests.map((request: any, index: number) => (
             <div key={index} style={{ 
               background: 'rgba(255,255,255,0.95)', 
-              borderRadius: 25, 
-              padding: 35, 
+              borderRadius: 20, 
+              padding: 20, 
               boxShadow: '0 15px 35px rgba(0,0,0,0.1)',
               border: '2px solid transparent',
               transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
@@ -888,18 +806,18 @@ function RequestsSection({ user }: { user: User }) {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 25 }}>
                 <div>
                   <h4 style={{ 
-                    margin: '0 0 12px 0', 
+                    margin: '0 0 8px 0', 
                     color: '#333', 
-                    fontSize: '1.6rem', 
+                    fontSize: '1.3rem', 
                     fontWeight: 800 
                   }}>
                     {request.subcategory?.name || 'Service Request'}
                   </h4>
                   <p style={{ 
-                    margin: '0 0 15px 0', 
+                    margin: '0 0 10px 0', 
                     color: '#666', 
-                    fontSize: '1.1rem', 
-                    lineHeight: 1.6,
+                    fontSize: '0.9rem', 
+                    lineHeight: 1.4,
                     fontWeight: 500
                   }}>
                     {request.notes || 'No additional details provided'}
@@ -908,10 +826,10 @@ function RequestsSection({ user }: { user: User }) {
                 <div style={{ 
                   background: getStatusColor(request.status), 
                   color: 'white', 
-                  padding: '12px 20px', 
-                  borderRadius: 25, 
+                  padding: '8px 15px', 
+                  borderRadius: 20, 
                   fontWeight: 800,
-                  fontSize: '1rem',
+                  fontSize: '0.8rem',
                   textTransform: 'uppercase',
                   boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
                   letterSpacing: '0.5px'
@@ -928,66 +846,66 @@ function RequestsSection({ user }: { user: User }) {
               }}>
                 <div style={{ 
                   background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', 
-                  padding: '20px', 
-                  borderRadius: 20,
+                  padding: '15px', 
+                  borderRadius: 15,
                   border: '1px solid rgba(0,0,0,0.05)'
                 }}>
-                  <strong style={{ color: '#333', fontSize: '1.1rem' }}>💰 Price:</strong>
-                  <p style={{ margin: '10px 0 0 0', color: '#666', fontSize: '1.2rem', fontWeight: 600 }}>${request.total_price}</p>
+                  <strong style={{ color: '#333', fontSize: '0.9rem' }}>💰 Price:</strong>
+                  <p style={{ margin: '8px 0 0 0', color: '#666', fontSize: '1rem', fontWeight: 600 }}>${request.total_price}</p>
                 </div>
                 <div style={{ 
                   background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', 
-                  padding: '20px', 
-                  borderRadius: 20,
+                  padding: '15px', 
+                  borderRadius: 15,
                   border: '1px solid rgba(0,0,0,0.05)'
                 }}>
-                  <strong style={{ color: '#333', fontSize: '1.1rem' }}>📅 Service Date:</strong>
-                  <p style={{ margin: '10px 0 0 0', color: '#666', fontSize: '1.2rem', fontWeight: 600 }}>{formatDate(request.service_date)}</p>
+                  <strong style={{ color: '#333', fontSize: '0.9rem' }}>📅 Service Date:</strong>
+                  <p style={{ margin: '8px 0 0 0', color: '#666', fontSize: '1rem', fontWeight: 600 }}>{formatDate(request.service_date)}</p>
                 </div>
                 <div style={{ 
                   background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', 
-                  padding: '20px', 
-                  borderRadius: 20,
+                  padding: '15px', 
+                  borderRadius: 15,
                   border: '1px solid rgba(0,0,0,0.05)'
                 }}>
-                  <strong style={{ color: '#333', fontSize: '1.1rem' }}>💳 Payment:</strong>
-                  <p style={{ margin: '10px 0 0 0', color: '#666', fontSize: '1.2rem', fontWeight: 600 }}>{request.payment_status}</p>
+                  <strong style={{ color: '#333', fontSize: '0.9rem' }}>💳 Payment:</strong>
+                  <p style={{ margin: '8px 0 0 0', color: '#666', fontSize: '1rem', fontWeight: 600 }}>{request.payment_status}</p>
                 </div>
               </div>
               
               {request.provider && (
                 <div style={{ 
                   background: 'linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%)', 
-                  padding: '20px', 
-                  borderRadius: 20,
+                  padding: '15px', 
+                  borderRadius: 15,
                   border: '2px solid #4CAF50',
-                  marginBottom: 20
+                  marginBottom: 15
                 }}>
-                  <strong style={{ color: '#2e7d32', fontSize: '1.1rem' }}>👨‍🔧 Assigned Provider:</strong>
-                  <p style={{ margin: '10px 0 0 0', color: '#388e3c', fontSize: '1.2rem', fontWeight: 600 }}>{request.provider}</p>
+                  <strong style={{ color: '#2e7d32', fontSize: '0.9rem' }}>👨‍🔧 Assigned Provider:</strong>
+                  <p style={{ margin: '8px 0 0 0', color: '#388e3c', fontSize: '1rem', fontWeight: 600 }}>{request.provider}</p>
                 </div>
               )}
               
               <div style={{ 
                 background: 'linear-gradient(135deg, #f0f8ff 0%, #e3f2fd 100%)', 
-                padding: '20px', 
-                borderRadius: 20,
-                borderLeft: '6px solid #667eea'
+                padding: '15px', 
+                borderRadius: 15,
+                borderLeft: '4px solid #667eea'
               }}>
-                <strong style={{ color: '#333', fontSize: '1.1rem' }}>📝 Request Details:</strong>
-                <p style={{ margin: '10px 0 0 0', color: '#666', lineHeight: 1.6, fontSize: '1.1rem' }}>
+                <strong style={{ color: '#333', fontSize: '0.9rem' }}>📝 Request Details:</strong>
+                <p style={{ margin: '8px 0 0 0', color: '#666', lineHeight: 1.4, fontSize: '0.9rem' }}>
                   {request.notes || 'No additional details provided'}
                 </p>
               </div>
               
               <div style={{ 
-                marginTop: 20, 
-                padding: '15px 20px', 
+                marginTop: 15, 
+                padding: '12px 15px', 
                 background: 'rgba(0,0,0,0.05)', 
-                borderRadius: 15,
+                borderRadius: 12,
                 border: '1px solid rgba(0,0,0,0.1)'
               }}>
-                <small style={{ color: '#666', fontSize: '0.95rem' }}>
+                <small style={{ color: '#666', fontSize: '0.8rem' }}>
                   <strong>Request ID:</strong> #{request.id} | 
                   <strong>Created:</strong> {formatDate(request.created_at)} | 
                   <strong>Last Updated:</strong> {formatDate(request.updated_at)}
@@ -1192,7 +1110,7 @@ function ServicesSection({ user }: { user: User }) {
 
   return (
     <div style={{ 
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+      background: 'linear-gradient(135deg,rgb(58, 98, 154) 0%, #764ba2 100%)', 
       borderRadius: 25, 
       padding: '40px 30px', 
       width: '100%', 
@@ -1310,7 +1228,7 @@ function ServicesSection({ user }: { user: User }) {
             {Object.keys(categoryData).map((category, index) => {
               const iconData = categoryIcons[category] || {
                 icon: getCategoryIcon(category),
-                gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                gradient: 'linear-gradient(135deg,rgb(122, 77, 245) 0%, #764ba2 100%)',
                 color: '#667eea'
               };
               return (
