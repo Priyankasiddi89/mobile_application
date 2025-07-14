@@ -25,7 +25,8 @@ class Booking(Document):
     service_date = DateTimeField(required=True)  # Date when service will be provided
     total_price = DecimalField(required=True, precision=2)
     status = StringField(required=True, choices=['pending', 'accepted', 'confirmed', 'completed', 'cancelled'], default='pending')
-    payment_status = StringField(choices=['unpaid', 'paid'], default='unpaid')
+    payment_status = StringField(choices=['unpaid', 'pending', 'paid'], default='unpaid')
+    payment_method = StringField(choices=['online', 'cod'], default='online')
     notes = StringField(max_length=500)
     declined_by = ListField(StringField(), default=list)  # List of provider usernames who declined
     created_at = DateTimeField(default=datetime.utcnow)

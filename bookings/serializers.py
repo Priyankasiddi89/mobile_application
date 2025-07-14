@@ -18,7 +18,7 @@ class ServiceSubcategorySerializer(serializers.Serializer):
     name = serializers.CharField()
     description = serializers.CharField()
     price = serializers.DecimalField(max_digits=10, decimal_places=2, coerce_to_string=False)
-    category = serializers.CharField(source='category.id')
+    category = ServiceCategorySerializer()
 
     def get_id(self, obj):
         return str(obj.id)
@@ -33,6 +33,7 @@ class BookingSerializer(serializers.Serializer):
     total_price = serializers.DecimalField(max_digits=10, decimal_places=2)
     status = serializers.CharField()
     payment_status = serializers.CharField()
+    payment_method = serializers.CharField(required=False)
     notes = serializers.CharField(required=False, allow_blank=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)

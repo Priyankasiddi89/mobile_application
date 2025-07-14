@@ -12,6 +12,9 @@ from decimal import Decimal
 # Create your views here.
 
 class ServiceCategoriesView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [MongoengineJWTAuthentication]
+
     def get(self, request):
         """Get all service categories"""
         categories = ServiceCategory.objects.all()
@@ -19,6 +22,9 @@ class ServiceCategoriesView(APIView):
         return Response(serializer.data)
 
 class ServiceSubcategoriesView(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [MongoengineJWTAuthentication]
+
     def get(self, request):
         """Get subcategories for a specific category"""
         category_id = request.query_params.get('category_id')
