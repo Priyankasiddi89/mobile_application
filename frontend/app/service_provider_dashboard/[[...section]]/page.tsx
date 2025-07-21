@@ -847,12 +847,8 @@ function ServicesSection({ user }: { user: User }) {
       fetch("http://localhost:8000/api/service_provider_dashboard/services/", {
         headers: { Authorization: `Bearer ${token}` },
       }),
-      fetch("http://localhost:8000/api/bookings/subcategories/", {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-      fetch("http://localhost:8000/api/bookings/categories/", {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      fetch("http://localhost:8000/api/bookings/subcategories/"),  // No auth needed for public endpoints
+      fetch("http://localhost:8000/api/bookings/categories/")      // No auth needed for public endpoints
     ])
       .then(([registeredRes, availableRes, categoriesRes]) => {
         // Check if responses are ok
@@ -873,15 +869,19 @@ function ServicesSection({ user }: { user: User }) {
         ]);
       })
       .then(([registeredData, availableData, categoriesData]) => {
-        console.log('Fetched data:', {
-          registeredData,
-          availableData: availableData?.length ? `${availableData.length} services` : availableData,
+        console.log('🔧 Service Provider - Fetched data:', {
+          registeredData: registeredData?.length ? `${registeredData.length} registered` : registeredData,
+          availableData: availableData?.length ? `${availableData.length} available services` : availableData,
           categoriesData: categoriesData?.length ? `${categoriesData.length} categories` : categoriesData
         });
 
         // Log sample service to check structure
         if (availableData && availableData.length > 0) {
-          console.log('Sample service:', availableData[0]);
+          console.log('🔧 Sample available service:', availableData[0]);
+        }
+
+        if (registeredData && registeredData.length > 0) {
+          console.log('🔧 Sample registered service:', registeredData[0]);
         }
 
         setRegisteredServices(Array.isArray(registeredData) ? registeredData : []);
@@ -1351,31 +1351,6 @@ function ServicesSection({ user }: { user: User }) {
                             }}
                           >
                             🔄 Clear Filters
-                          </button>
-                          <button
-                            style={{
-                              padding: '8px 16px',
-                              borderRadius: 8,
-                              background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
-                              color: 'white',
-                              border: 'none',
-                              cursor: 'pointer',
-                              fontSize: '14px',
-                              fontWeight: 600
-                            }}
-                            onClick={() => {
-                              setSearchTerm('');
-                              setSelectedCategory('all');
-                              // Scroll to categories section
-                              setTimeout(() => {
-                                const categoriesSection = document.querySelector('[data-categories-section]');
-                                if (categoriesSection) {
-                                  categoriesSection.scrollIntoView({ behavior: 'smooth' });
-                                }
-                              }, 100);
-                            }}
-                          >
-                            📂 Browse Categories
                           </button>
                         </div>
                       </div>

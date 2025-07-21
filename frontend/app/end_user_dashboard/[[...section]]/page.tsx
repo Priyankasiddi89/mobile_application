@@ -315,6 +315,62 @@ function EndUserDashboard({ user }: { user: User }) {
 
 function MainDashboard({ user }: { user: User }) {
   const router = useRouter();
+  const [categories, setCategories] = useState<any[]>([]);
+  const [subcategories, setSubcategories] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch categories and subcategories from backend
+  useEffect(() => {
+    const fetchData = async () => {
+      console.log('🚀 Starting to fetch categories and subcategories...');
+      try {
+        // Fetch categories (no authentication required)
+        console.log('📋 Fetching categories from:', "http://localhost:8000/api/bookings/categories/");
+        const categoriesResponse = await fetch("http://localhost:8000/api/bookings/categories/");
+        console.log('📋 Categories response status:', categoriesResponse.status);
+
+        if (categoriesResponse.ok) {
+          const categoriesData = await categoriesResponse.json();
+          console.log('✅ Categories fetched successfully:', categoriesData);
+          console.log('📊 Number of categories:', categoriesData.length);
+          if (categoriesData.length > 0) {
+            console.log('🔍 Sample category structure:', categoriesData[0]);
+          }
+          setCategories(categoriesData);
+        } else {
+          console.error('❌ Categories fetch failed:', categoriesResponse.status, categoriesResponse.statusText);
+          const errorText = await categoriesResponse.text();
+          console.error('❌ Error response:', errorText);
+        }
+
+        // Fetch all subcategories (no authentication required)
+        console.log('🔧 Fetching subcategories from:', "http://localhost:8000/api/bookings/subcategories/");
+        const subcategoriesResponse = await fetch("http://localhost:8000/api/bookings/subcategories/");
+        console.log('🔧 Subcategories response status:', subcategoriesResponse.status);
+
+        if (subcategoriesResponse.ok) {
+          const subcategoriesData = await subcategoriesResponse.json();
+          console.log('✅ Subcategories fetched successfully:', subcategoriesData);
+          console.log('📊 Number of subcategories:', subcategoriesData.length);
+          if (subcategoriesData.length > 0) {
+            console.log('🔍 Sample subcategory structure:', subcategoriesData[0]);
+          }
+          setSubcategories(subcategoriesData);
+        } else {
+          console.error('❌ Subcategories fetch failed:', subcategoriesResponse.status, subcategoriesResponse.statusText);
+          const errorText = await subcategoriesResponse.text();
+          console.error('❌ Error response:', errorText);
+        }
+      } catch (error) {
+        console.error('💥 Error fetching data:', error);
+      } finally {
+        console.log('🏁 Fetch completed, setting loading to false');
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   const mainOptions = [
     {
@@ -340,32 +396,57 @@ function MainDashboard({ user }: { user: User }) {
     }
   ];
 
-  const categories = [
-    {
-      name: "Cleaning Services",
-      icon: "🧹",
-      gradient: "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)",
-      description: "Professional cleaning services for your home"
-    },
-    {
-      name: "Plumbing Services",
-      icon: "🔧",
-      gradient: "linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)",
-      description: "Expert plumbing and repair services"
-    },
-    {
-      name: "Electrical Services",
-      icon: "⚡",
-      gradient: "linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)",
-      description: "Safe and reliable electrical work"
-    },
-    {
-      name: "Landscaping",
-      icon: "🌿",
-      gradient: "linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)",
-      description: "Beautiful outdoor spaces and maintenance"
-    }
-  ];
+  // Helper function to get category icon and gradient
+  const getCategoryIcon = (categoryName: string) => {
+    const iconMap: { [key: string]: { icon: string; gradient: string } } = {
+      'Cleaning Services': {
+        icon: '🧹',
+        gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+      },
+      'Appliance Repair & Installation': {
+        icon: '🔧',
+        gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'
+      },
+      'Electrician Services': {
+        icon: '⚡',
+        gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'
+      },
+      'Plumbing': {
+        icon: '🚰',
+        gradient: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)'
+      },
+      'Carpentry': {
+        icon: '🔨',
+        gradient: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)'
+      },
+      'default': {
+        icon: '🏠',
+        gradient: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)'
+      }
+    };
+    return iconMap[categoryName] || iconMap.default;
+  };
+
+  // Create category data structure from backend data
+  const categoryData = categories.reduce((acc: any, category: any) => {
+    // Fix: subcategory.category is an object, not just an ID
+    const categorySubcategories = subcategories.filter((sub: any) => sub.category.id === category.id);
+    console.log(`🔍 Processing category: ${category.name} (ID: ${category.id})`);
+    console.log(`🔍 Found ${categorySubcategories.length} subcategories for this category`);
+    console.log('🔍 Subcategories:', categorySubcategories);
+
+    acc[category.name] = {
+      subcategories: categorySubcategories.map((sub: any) => ({
+        id: sub.id,
+        name: sub.name,
+        description: sub.description,
+        price: sub.price
+      }))
+    };
+    return acc;
+  }, {});
+
+  console.log('🏗️ Final categoryData structure:', categoryData);
 
   return (
     <div style={{ 
@@ -513,6 +594,144 @@ function MainDashboard({ user }: { user: User }) {
         </div>
       </div>
 
+      {/* Available Services Preview */}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '40px', position: 'relative', zIndex: 1 }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏳</div>
+          <h3 style={{ margin: '0', color: 'white' }}>Loading services...</h3>
+        </div>
+      ) : categories.length > 0 ? (
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <h2 style={{
+            fontSize: '1.8rem',
+            fontWeight: 800,
+            marginBottom: 20,
+            color: 'white',
+            textAlign: 'center',
+            textShadow: '0 2px 4px rgba(0,0,0,0.3)'
+          }}>Available Services</h2>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+            gap: 15
+          }}>
+            {categories.slice(0, 4).map((category: any, index: number) => {
+              console.log(`🎨 Rendering category: ${category.name}`);
+              const iconData = getCategoryIcon(category.name);
+              const serviceCount = categoryData[category.name]?.subcategories?.length || 0;
+              console.log(`🎨 Service count for ${category.name}: ${serviceCount}`);
+
+              return (
+                <div
+                  key={category.id}
+                  onClick={() => router.push("/end_user_dashboard/services")}
+                  style={{
+                    background: iconData.gradient,
+                    borderRadius: 16,
+                    padding: 20,
+                    cursor: 'pointer',
+                    transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                    boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                    border: '1px solid rgba(255,255,255,0.2)',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    backdropFilter: 'blur(10px)'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
+                    e.currentTarget.style.boxShadow = '0 20px 40px rgba(0,0,0,0.25)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                    e.currentTarget.style.boxShadow = '0 10px 25px rgba(0,0,0,0.15)';
+                  }}
+                >
+                  <div style={{
+                    background: 'rgba(255,255,255,0.25)',
+                    width: 50,
+                    height: 50,
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '1.5rem',
+                    marginBottom: 12,
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(255,255,255,0.3)'
+                  }}>
+                    {iconData.icon}
+                  </div>
+                  <h3 style={{
+                    margin: '0 0 8px 0',
+                    color: 'white',
+                    fontSize: '1.1rem',
+                    fontWeight: 700,
+                    textShadow: '0 2px 4px rgba(0,0,0,0.3)'
+                  }}>
+                    {category.name}
+                  </h3>
+                  <p style={{
+                    margin: '0 0 8px 0',
+                    color: 'rgba(255,255,255,0.9)',
+                    fontSize: '0.85rem',
+                    lineHeight: 1.4,
+                    fontWeight: 500
+                  }}>
+                    {category.description}
+                  </p>
+                  <div style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    padding: '4px 8px',
+                    borderRadius: '12px',
+                    fontSize: '0.75rem',
+                    color: 'white',
+                    fontWeight: 600,
+                    display: 'inline-block'
+                  }}>
+                    {serviceCount} services
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {categories.length > 4 && (
+            <div style={{ textAlign: 'center', marginTop: 20 }}>
+              <button
+                onClick={() => router.push("/end_user_dashboard/services")}
+                style={{
+                  background: 'rgba(255,255,255,0.2)',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  color: 'white',
+                  padding: '12px 24px',
+                  borderRadius: '25px',
+                  fontSize: '0.9rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  backdropFilter: 'blur(10px)',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.3)';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.2)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                View All {categories.length} Categories →
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{ textAlign: 'center', padding: '40px', position: 'relative', zIndex: 1 }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🏠</div>
+          <h3 style={{ margin: '0 0 8px 0', color: 'white' }}>No services available</h3>
+          <p style={{ margin: 0, color: 'rgba(255,255,255,0.8)' }}>Services will appear here once they're added to the platform</p>
+        </div>
+      )}
 
     </div>
   );
@@ -602,20 +821,27 @@ function RequestsSection({ user }: { user: User }) {
       }
 
       try {
+        console.log('📋 Fetching user bookings...');
         // Fetch bookings from backend API
-        const response = await fetch("http://localhost:8000/api/bookings/user-bookings/", {
+        const response = await fetch("http://localhost:8000/api/end_user_dashboard/bookings/", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        
+
+        console.log('📋 Bookings response status:', response.status);
+
         if (response.ok) {
           const bookings = await response.json();
+          console.log('✅ Bookings fetched successfully:', bookings);
+          console.log('📊 Number of bookings:', bookings.length);
           setRequests(bookings);
         } else {
-          console.error('Failed to fetch bookings');
+          console.error('❌ Failed to fetch bookings, status:', response.status);
+          const errorText = await response.text();
+          console.error('❌ Error response:', errorText);
           setRequests([]);
         }
       } catch (error) {
-        console.error('Error fetching bookings:', error);
+        console.error('💥 Error fetching bookings:', error);
         setRequests([]);
       } finally {
         setLoading(false);
@@ -664,15 +890,27 @@ function RequestsSection({ user }: { user: User }) {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const formatDate = (dateString: string | null) => {
+    if (!dateString || dateString === 'N/A') {
+      return 'Date not available';
+    }
+
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return 'Invalid date';
+      }
+
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      return 'Date not available';
+    }
   };
 
   return (
@@ -937,14 +1175,14 @@ function ServicesSection({ user }: { user: User }) {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch categories
+        // Fetch categories (no authentication required)
         const categoriesResponse = await fetch("http://localhost:8000/api/bookings/categories/");
         if (categoriesResponse.ok) {
           const categoriesData = await categoriesResponse.json();
           setCategories(categoriesData);
         }
 
-        // Fetch all subcategories
+        // Fetch all subcategories (no authentication required)
         const subcategoriesResponse = await fetch("http://localhost:8000/api/bookings/subcategories/");
         if (subcategoriesResponse.ok) {
           const subcategoriesData = await subcategoriesResponse.json();
@@ -974,7 +1212,8 @@ function ServicesSection({ user }: { user: User }) {
 
   // Create category data structure from backend data
   const categoryData = categories.reduce((acc: any, category: any) => {
-    const categorySubcategories = subcategories.filter((sub: any) => sub.category === category.id);
+    // Fix: subcategory.category is an object, not just an ID
+    const categorySubcategories = subcategories.filter((sub: any) => sub.category.id === category.id);
     acc[category.name] = {
       subcategories: categorySubcategories.map((sub: any) => ({
         id: sub.id,

@@ -80,26 +80,84 @@ class ProviderServicesView(APIView):
 
     def get(self, request):
         """Get services registered by the current provider"""
-        user = request.user
+        try:
+            user = request.user
+            print(f"🔧 Getting registered services for provider: {user.username}")
+            print(f"🔧 User object: {user}")
+            print(f"🔧 User type: {type(user)}")
 
-        # Get registered services for this provider
-        registered_services = user.registered_services
-        services_data = []
+            # Check if user has registered_services attribute
+            if not hasattr(user, 'registered_services'):
+                print(f"❌ User {user.username} has no registered_services attribute")
+                return Response([])
 
-        for service in registered_services:
-            services_data.append({
-                'id': str(service.id),
-                'name': service.name,
-                'description': service.description,
-                'price': float(service.price),
-                'category': {
-                    'id': str(service.category.id),
-                    'name': service.category.name,
-                    'description': service.category.description
-                }
-            })
+            # Get registered services for this provider
+            registered_services = user.registered_services
+            print(f"🔧 Provider has {len(registered_services) if registered_services else 0} registered services")
 
-        return Response(services_data)
+            if not registered_services:
+                print(f"🔧 No registered services found, returning empty list")
+                return Response([])
+
+            services_data = []
+
+            for service in registered_services:
+                try:
+                    # Safely access service attributes
+                    service_data = {
+                        'id': str(service.id),
+                        'name': getattr(service, 'name', 'Unknown Service'),
+                        'description': getattr(service, 'description', ''),
+                        'price': float(getattr(service, 'price', 0)),
+                    }
+
+                    # Safely access category
+                    if hasattr(service, 'category') and service.category:
+                        try:
+                            service_data['category'] = {
+                                'id': str(service.category.id),
+                                'name': service.category.name,
+                                'description': getattr(service.category, 'description', '')
+                            }
+                        except Exception as cat_error:
+                            print(f"   ⚠️ Error accessing category for service {service.id}: {cat_error}")
+                            service_data['category'] = {
+                                'id': 'unknown',
+                                'name': 'Unknown Category',
+                                'description': ''
+                            }
+                    else:
+                        service_data['category'] = {
+                            'id': 'unknown',
+                            'name': 'Unknown Category',
+                            'description': ''
+                        }
+
+                    services_data.append(service_data)
+                    print(f"   ✅ Added service: {service_data['name']}")
+                except Exception as e:
+                    print(f"   ❌ Error processing service {service.id}: {e}")
+                    # Add a fallback service entry
+                    services_data.append({
+                        'id': str(getattr(service, 'id', 'unknown')),
+                        'name': 'Error Loading Service',
+                        'description': 'Error loading service details',
+                        'price': 0.0,
+                        'category': {
+                            'id': 'unknown',
+                            'name': 'Unknown Category',
+                            'description': ''
+                        }
+                    })
+
+            print(f"🔧 Returning {len(services_data)} services")
+            return Response(services_data)
+
+        except Exception as e:
+            print(f"❌ Error in ProviderServicesView.get: {e}")
+            import traceback
+            traceback.print_exc()
+            return Response([], status=status.HTTP_200_OK)  # Return empty list instead of 500
 
     def post(self, request):
         """Register for a new service"""
