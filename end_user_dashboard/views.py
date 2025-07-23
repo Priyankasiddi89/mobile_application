@@ -4,11 +4,11 @@ from rest_framework.response import Response
 from rest_framework import status
 from bookings.models import Booking, ServiceCategory, ServiceSubcategory
 from authentication.models import User
-from authentication.views import MongoengineJWTAuthentication
+from authentication.views import PostgreSQLJWTAuthentication
 import json
 
 @api_view(['GET'])
-@authentication_classes([MongoengineJWTAuthentication])
+@authentication_classes([PostgreSQLJWTAuthentication])
 @permission_classes([IsAuthenticated])
 def user_bookings(request):
     """Get all bookings for the authenticated end user"""
@@ -137,7 +137,7 @@ def user_bookings(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
-@authentication_classes([MongoengineJWTAuthentication])
+@authentication_classes([PostgreSQLJWTAuthentication])
 @permission_classes([IsAuthenticated])
 def available_services(request):
     """Get all available services for end users to browse"""
@@ -162,7 +162,7 @@ def available_services(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
-@authentication_classes([MongoengineJWTAuthentication])
+@authentication_classes([PostgreSQLJWTAuthentication])
 @permission_classes([IsAuthenticated])
 def user_requests(request):
     """Get all service requests made by the authenticated end user"""

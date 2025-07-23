@@ -396,32 +396,38 @@ function MainDashboard({ user }: { user: User }) {
     }
   ];
 
-  // Helper function to get category icon and gradient
+  // Helper function to get category icon and gradient - using consistent cleaning service colors
   const getCategoryIcon = (categoryName: string) => {
+    const cleaningGradient = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+
     const iconMap: { [key: string]: { icon: string; gradient: string } } = {
       'Cleaning Services': {
         icon: '🧹',
-        gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+        gradient: cleaningGradient
       },
       'Appliance Repair & Installation': {
         icon: '🔧',
-        gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'
+        gradient: cleaningGradient
       },
-      'Electrician Services': {
+      'Electricians': {
         icon: '⚡',
-        gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'
+        gradient: cleaningGradient
       },
-      'Plumbing': {
-        icon: '🚰',
-        gradient: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)'
+      'Plumbers': {
+        icon: '🚿',
+        gradient: cleaningGradient
       },
-      'Carpentry': {
-        icon: '🔨',
-        gradient: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)'
+      'Carpenters': {
+        icon: '🪚',
+        gradient: cleaningGradient
+      },
+      'Home Renovation & Interior': {
+        icon: '🏡',
+        gradient: cleaningGradient
       },
       'default': {
         icon: '🏠',
-        gradient: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)'
+        gradient: cleaningGradient
       }
     };
     return iconMap[categoryName] || iconMap.default;
@@ -1202,9 +1208,11 @@ function ServicesSection({ user }: { user: User }) {
   const getCategoryIcon = (categoryName: string) => {
     const iconMap: { [key: string]: string } = {
       'Cleaning Services': '🧹',
-      'Plumbing Services': '🔧',
-      'Electrical Services': '⚡',
-      'Landscaping': '🌿',
+      'Appliance Repair & Installation': '🔧',
+      'Electricians': '⚡',
+      'Plumbers': '🚿',
+      'Carpenters': '🪚',
+      'Home Renovation & Interior': '🏡',
       'default': '🏠'
     };
     return iconMap[categoryName] || iconMap.default;
@@ -1228,9 +1236,11 @@ function ServicesSection({ user }: { user: User }) {
 
   const categoryIcons = {
     "Cleaning Services": { icon: "🧹", color: "#667eea", gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" },
-    "Plumbing Services": { icon: "🔧", color: "#f093fb", gradient: "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)" },
-    "Electrical Services": { icon: "⚡", color: "#4facfe", gradient: "linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)" },
-    "Landscaping": { icon: "🌿", color: "#43e97b", gradient: "linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)" }
+    "Appliance Repair & Installation": { icon: "🔧", color: "#667eea", gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" },
+    "Electricians": { icon: "⚡", color: "#667eea", gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" },
+    "Plumbers": { icon: "🚿", color: "#667eea", gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" },
+    "Carpenters": { icon: "🪚", color: "#667eea", gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" },
+    "Home Renovation & Interior": { icon: "🏡", color: "#667eea", gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" }
   };
 
   const timeRanges = [

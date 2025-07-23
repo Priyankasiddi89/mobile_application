@@ -1,397 +1,432 @@
-# Home Services App: Django Backend & Next.js Frontend
+# 🏠 Home Services Platform
 
-## Project Overview
-This project is a full-stack web application for home services, featuring:
-- **Django** backend (with MongoDB)
-- **Next.js** frontend (React)
-- JWT authentication with user roles and types
-- **Dynamic service catalog** with categories and subcategories from database
-- **Quote request system** with detailed service requirements
-- **Booking management** for customers to view and track requests
-- **Role-based dashboards** for different user types
-- **Modern, responsive UI** with optimized layouts and compact design
+A comprehensive full-stack web application for home services management, connecting customers with service providers.
 
----
+## 🚀 Project Overview
 
-## User Structure
+This platform features:
+- **Django REST API** backend with **PostgreSQL** database
+- **Next.js** frontend with modern React components
+- **JWT authentication** with role-based access control
+- **Multi-provider booking system** with request management
+- **Real-time service catalog** with 6 categories and 24+ services
+- **Provider dashboard** for service registration and request handling
+- **Customer dashboard** for booking and tracking services
+- **Modern, responsive UI** with consistent design system
+
+## 👥 User Roles & Permissions
+
 ```
-├── End User
-│   ├── Head of House
-│   └── Family Member
+├── 🏠 End User (Customer)
+│   ├── Head of House - Full booking permissions
+│   └── Family Member - Limited booking permissions
 │
-├── Service Provider
-│   ├── Admin
-│   ├── Employee
-│   └── Supervisor
+├── 🔧 Service Provider
+│   ├── Admin - Full provider dashboard access
+│   ├── Employee - Service execution
+│   └── Supervisor - Team management
 │
-└── Platform Provider (Hidden)
-    ├── Admin
-    ├── Employee
-    └── Service Desk
+└── 🏢 Platform Provider (Admin Only)
+    ├── Admin - Platform management
+    ├── Employee - Support operations
+    └── Service Desk - Customer support
 ```
-*Platform Provider is not available in the UI for registration.*
+
+## ✨ Key Features
+
+### 🏠 **Customer Experience**
+- **Service Discovery**: Browse 6 categories with 24+ professional services
+- **Easy Booking**: Simple booking flow with service date selection
+- **Request Tracking**: Real-time status updates (pending → accepted → completed)
+- **Multi-Provider**: Requests visible to all qualified providers
+- **Payment Options**: Cash on Delivery (COD) and online payment support
+
+### 🔧 **Service Provider Tools**
+- **Service Registration**: Register for specific services in your expertise
+- **Request Management**: View, accept, or decline incoming requests
+- **Earnings Dashboard**: Track completed jobs and earnings
+- **Status Updates**: Mark services as completed with payment collection
+- **Multi-Provider System**: Compete fairly for customer requests
+
+### 🎨 **Modern UI/UX**
+- **Consistent Design**: Purple gradient theme across all components
+- **Responsive Layout**: Works on desktop, tablet, and mobile
+- **Real-time Updates**: Live request status and dashboard updates
+- **Intuitive Navigation**: Clean sidebar navigation with role-based menus
+- **Professional Styling**: Modern cards, buttons, and form elements
+
+## 🛠️ **Service Categories**
+
+| Category | Icon | Services Available |
+|----------|------|-------------------|
+| **🧹 Cleaning Services** | 🧹 | Home Deep Cleaning, Bathroom Cleaning, Kitchen Cleaning, Sofa/Carpet Cleaning |
+| **🔧 Appliance Repair & Installation** | 🔧 | AC Repair & Servicing, Washing Machine Repair, Refrigerator Repair, TV Installation & Repair |
+| **⚡ Electricians** | ⚡ | Fan & Light Installation, Switchboard Repair, Wiring & Short Circuit Fix, Inverter Installation |
+| **🚿 Plumbers** | 🚿 | Tap & Faucet Repair, Toilet & Flush Fix, Pipe Leakage Repair, Bathroom Fitting Installation |
+| **🪚 Carpenters** | 🪚 | Furniture Assembly, Door & Window Repair, Bed/Table Repair, Hinge/Lock Fixing |
+| **🏡 Home Renovation & Interior** | 🏡 | Interior Painting, False Ceiling Work, Modular Kitchen Setup, Tiling & Flooring |
 
 ---
 
-## Features
+## 🚀 **Quick Start Guide**
 
-### 🏠 End User Dashboard
-- **Home**: Main dashboard with quick actions and overview
-- **Book a Service**: Browse and book services from the catalog
-- **My Requests**: View and track all submitted requests with detailed status information
-- **Profile Management**: Access user profile and settings
-- **Compact Design**: Optimized layouts that fit within viewport without scrolling
+### **Prerequisites**
+- **Python 3.9+** with pip
+- **Node.js 18+** with npm
+- **PostgreSQL 12+** database
+- **Git** for version control
 
-### 🔧 Service Provider Dashboard
-- **Service Management**: Manage available services and pricing
-- **Request Management**: View and respond to customer requests
-- **Booking Management**: Track confirmed bookings and schedules
-- **Analytics**: View performance metrics and earnings
+### **1. Clone Repository**
+```bash
+git clone <repository-url>
+cd home-services-platform
+```
 
-### 🎨 Enhanced UI/UX
-- **Responsive Design**: Works seamlessly on desktop, tablet, and mobile
-- **Modern Styling**: Updated color schemes, gradients, shadows, and glassmorphism effects
-- **Interactive Elements**: Smooth hover effects, transitions, and loading states
-- **Compact Layouts**: Optimized spacing and font sizes for better content density
-- **Real-time Notifications**: Success/error messages with auto-dismiss
-- **Fixed Viewport Design**: Content fits within current screen without scrolling
+### **2. Backend Setup (Django + PostgreSQL)**
 
----
-
-## Recent Updates
-
-### UI/UX Improvements
-- **Updated Color Scheme**: Enhanced gradients and color palette for better visual appeal
-- **Compact Request Cards**: Reduced font sizes and padding for better space utilization
-- **Optimized Navigation**: Streamlined sidebar with improved user flow
-- **Fixed Viewport Layouts**: Dashboard content fits within screen without scrolling
-- **Enhanced Typography**: Improved font sizing and spacing throughout the application
-
-### Navigation Structure
-- **Home**: Main dashboard with quick actions
-- **Book a Service**: Direct access to service booking
-- **My Requests**: Comprehensive request tracking with detailed status information
-- **Profile**: Quick access via sidebar header
-
----
-
-## Backend Setup (Django)
-
-### Prerequisites
-- Python 3.9+
-- MongoDB database
-- Virtual environment (recommended)
-
-### Installation Steps
-
-1. **Create and activate virtual environment:**
-   ```sh
+1. **Create virtual environment:**
+   ```bash
    python -m venv venv
-   # On Windows:
+
+   # Windows
    venv\Scripts\activate
-   # On macOS/Linux:
+
+   # macOS/Linux
    source venv/bin/activate
    ```
 
-2. **Install Python dependencies:**
-   ```sh
+2. **Install dependencies:**
+   ```bash
    pip install -r requirements.txt
    ```
 
-3. **Set up your .env file:**
-   ```env
-   MONGO_URI=mongodb+srv://<username>:<password>@<cluster-url>/<dbname>?retryWrites=true&w=majority
-   MONGO_DB_NAME=<dbname>
+3. **Configure database:**
+   ```bash
+   # Create .env file in project root
    SECRET_KEY=your-secret-key-here
    DEBUG=True
+
+   # PostgreSQL settings
+   DB_NAME=home_services_db
+   DB_USER=your_db_user
+   DB_PASSWORD=your_db_password
+   DB_HOST=localhost
+   DB_PORT=5432
    ```
 
-4. **Apply migrations:**
-   ```sh
+4. **Setup database:**
+   ```bash
    python manage.py makemigrations
    python manage.py migrate
+   python update_services_database.py  # Populate service catalog
+   python create_test_users_postgresql.py  # Create test users
    ```
 
-5. **Create a superuser (optional):**
-   ```sh
-   python manage.py createsuperuser
-   ```
-
-6. **Run the backend server:**
-   ```sh
+5. **Start backend server:**
+   ```bash
    python manage.py runserver
    ```
-   The backend will be available at [http://localhost:8000](http://localhost:8000)
+   Backend available at: **http://localhost:8000**
 
----
+### **3. Frontend Setup (Next.js)**
 
-## Frontend Setup (Next.js)
-
-### Prerequisites
-- Node.js 18+
-- npm or yarn
-
-### Installation Steps
-
-1. **Navigate to the frontend directory:**
-   ```sh
+1. **Navigate to frontend:**
+   ```bash
    cd frontend
    ```
 
-2. **Install frontend dependencies:**
-   ```sh
+2. **Install dependencies:**
+   ```bash
    npm install
    ```
 
-3. **Run the frontend development server:**
-   ```sh
+3. **Start development server:**
+   ```bash
    npm run dev
    ```
-   The app will be available at [http://localhost:3000](http://localhost:3000)
+   Frontend available at: **http://localhost:3000**
+
+### **4. Access the Application**
+
+| Service | URL | Description |
+|---------|-----|-------------|
+| **Frontend** | http://localhost:3000 | Main application interface |
+| **Backend API** | http://localhost:8000 | REST API endpoints |
+| **Django Admin** | http://localhost:8000/admin | Database management |
+
+### **5. Test with Demo Accounts**
+
+| Username | Password | Role | Access |
+|----------|----------|------|--------|
+| `test_customer` | `testpass123` | End User | Customer dashboard, booking services |
+| `test_provider` | `testpass123` | Service Provider | Provider dashboard, manage requests |
+| `admin` | `admin123` | Platform Admin | Full system access |
 
 ---
 
-## Quick Start Guide
+## 🔄 **How It Works**
 
-### 1. Start Backend Server
-```sh
-# In the project root directory
-python manage.py runserver
-```
+### **Customer Journey**
+1. **Browse Services** → Select from 6 categories with 24+ services
+2. **Book Service** → Choose service, set date, add notes
+3. **Wait for Providers** → Multiple providers can see your request
+4. **Provider Accepts** → Get notified when someone accepts
+5. **Service Completion** → Provider marks as complete, payment collected
+6. **Track Everything** → Real-time status updates in dashboard
 
-### 2. Start Frontend Server
-```sh
-# In a new terminal, navigate to frontend directory
-cd frontend
-npm run dev
-```
-
-### 3. Access the Application
-- **Frontend**: [http://localhost:3000](http://localhost:3000)
-- **Backend API**: [http://localhost:8000](http://localhost:8000)
-- **Django Admin**: [http://localhost:8000/admin](http://localhost:8000/admin)
-
-### 4. Register and Test
-1. Go to [http://localhost:3000](http://localhost:3000)
-2. Click "Sign Up" and create an End User account
-3. Login and explore the dashboard
-4. Browse services and submit quote requests
+### **Provider Journey**
+1. **Register Services** → Choose which services you offer
+2. **View Requests** → See incoming customer requests
+3. **Accept/Decline** → Choose requests that fit your schedule
+4. **Complete Service** → Mark job as done, collect payment
+5. **Track Earnings** → Monitor completed jobs and earnings
 
 ---
 
-## Authentication Flow
-- **Login:** `/login` (username, password)
-- **Sign Up:** `/signup` (username, password, user type, role)
-  - User type and role are selected via dropdowns
-  - Only End User and Service Provider types are available for registration
+## 📡 **API Documentation**
 
-## Service System
-- **Dynamic Categories**: Categories and subcategories are loaded from the database
-- **Quote Requests**: Submit detailed requests with descriptions, addresses, and preferred dates/times
-- **Status Tracking**: Track request status (pending, confirmed, completed, cancelled)
-- **Real-time Updates**: Get notifications for request status changes
-- **Compact Request Management**: Optimized request cards with detailed information
+### **Authentication Endpoints**
 
----
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/api/auth/register/` | Register new user | ❌ |
+| POST | `/api/auth/login/` | User login | ❌ |
+| POST | `/api/auth/logout/` | User logout | ✅ |
+| GET | `/api/auth/me/` | Get current user info | ✅ |
+| PUT | `/api/auth/me/` | Update user profile | ✅ |
 
-## API Endpoints (Backend)
+### **Service Endpoints**
 
-### Authentication Endpoints
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/bookings/categories/` | Get all service categories | ❌ |
+| GET | `/api/bookings/subcategories/` | Get all services | ❌ |
 
-#### Register
-- **POST** `/api/auth/register/`
-- **Request Body:**
-  ```json
-  {
-    "username": "alice",
-    "password": "mypassword",
-    "user_type": "End User",
-    "role": "Head of House"
-  }
-  ```
-- **Response:**
-  ```json
-  { "msg": "User registered successfully" }
-  ```
+### **Booking Endpoints**
 
-#### Login
-- **POST** `/api/auth/login/`
-- **Request Body:**
-  ```json
-  {
-    "username": "alice",
-    "password": "mypassword"
-  }
-  ```
-- **Response:**
-  ```json
-  {
-    "refresh": "<refresh_token>",
-    "access": "<access_token>",
-    "user_type": "End User",
-    "role": "Head of House"
-  }
-  ```
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/api/bookings/create/` | Create new booking | ✅ |
+| GET | `/api/end_user_dashboard/bookings/` | Get user's bookings | ✅ |
+| PUT | `/api/bookings/booking/<id>/` | Update booking status | ✅ |
 
-#### Other Auth Endpoints
-- `/api/auth/logout/` (POST)
-- `/api/auth/me/` (GET, JWT required)
-- `/api/auth/users/` (GET, JWT required)
+### **Service Provider Endpoints**
 
-### Service Endpoints
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| GET | `/api/service_provider_dashboard/requests/` | Get incoming requests | ✅ |
+| GET | `/api/service_provider_dashboard/services/` | Get registered services | ✅ |
+| POST | `/api/service_provider_dashboard/services/` | Register for service | ✅ |
+| DELETE | `/api/service_provider_dashboard/services/` | Unregister from service | ✅ |
+| POST | `/api/service_provider_dashboard/accept/<id>/` | Accept request | ✅ |
+| POST | `/api/service_provider_dashboard/decline/<id>/` | Decline request | ✅ |
+| POST | `/api/service_provider_dashboard/complete/<id>/` | Mark as completed | ✅ |
+| GET | `/api/service_provider_dashboard/earnings/` | Get earnings data | ✅ |
 
-#### Get Service Categories
-- **GET** `/api/bookings/categories/`
-- **Response:** List of all service categories
+### **Example API Calls**
 
-#### Get Service Subcategories
-- **GET** `/api/bookings/subcategories/`
-- **Response:** List of all subcategories with category information
-
-### Booking Endpoints
-
-#### Create Booking (Quote Request)
-- **POST** `/api/bookings/create/` (JWT required)
-- **Request Body:**
-  ```json
-  {
-    "subcategory_id": "subcategory_id",
-    "service_date": "2024-01-15T10:00:00Z",
-    "notes": "Description: Need deep cleaning\nAddress: 123 Main St"
-  }
-  ```
-- **Response:** Created booking details
-
-#### Get User Bookings
-- **GET** `/api/bookings/user-bookings/` (JWT required)
-- **Response:** List of all bookings for the authenticated user
-
-#### Update Booking Status
-- **PUT** `/api/bookings/booking/<booking_id>/` (JWT required)
-- **Request Body:**
-  ```json
-  {
-    "status": "cancelled"
-  }
-  ```
-- **Response:** Updated booking details
-
----
-
-## Testing with curl
-
-### Register
-```sh
+#### Register User
+```bash
 curl -X POST http://localhost:8000/api/auth/register/ \
   -H "Content-Type: application/json" \
-  -d '{"username": "alice", "password": "mypassword", "user_type": "End User", "role": "Head of House"}'
+  -d '{
+    "username": "john_doe",
+    "password": "securepass123",
+    "user_type": "End User",
+    "role": "Head of House"
+  }'
 ```
 
-### Login
-```sh
+#### Login
+```bash
 curl -X POST http://localhost:8000/api/auth/login/ \
   -H "Content-Type: application/json" \
-  -d '{"username": "alice", "password": "mypassword"}'
+  -d '{
+    "username": "john_doe",
+    "password": "securepass123"
+  }'
 ```
 
-### Get Current User
-```sh
-curl -X GET http://localhost:8000/api/auth/me/ \
-  -H "Authorization: Bearer <access_token>"
-```
-
-### Get Service Categories
-```sh
-curl -X GET http://localhost:8000/api/bookings/categories/
-```
-
-### Get Service Subcategories
-```sh
-curl -X GET http://localhost:8000/api/bookings/subcategories/
+#### Create Booking
+```bash
+curl -X POST http://localhost:8000/api/bookings/create/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <access_token>" \
+  -d '{
+    "subcategory_id": "1",
+    "service_date": "2024-01-15T10:00:00Z",
+    "notes": "Need deep cleaning for 3-bedroom apartment"
+  }'
 ```
 
 ---
 
-## Database Schema
+## 🗄️ **Database Schema (PostgreSQL)**
 
-### Users
-- `id`: ObjectId
-- `username`: String (unique)
-- `password`: String (hashed)
-- `user_type`: String (End User, Service Provider, Platform Provider)
-- `role`: String (varies by user_type)
-- `is_active`: Boolean
+### **Users Table**
+```sql
+- id: SERIAL PRIMARY KEY
+- username: VARCHAR(150) UNIQUE
+- password: VARCHAR(128) (hashed)
+- user_type: VARCHAR(50) (End User, Service Provider, Platform Provider)
+- role: VARCHAR(50) (varies by user_type)
+- email: VARCHAR(254)
+- is_active: BOOLEAN
+- date_joined: TIMESTAMP
+```
 
-### Service Categories
-- `id`: ObjectId
-- `name`: String
-- `description`: String
-- `icon`: String
+### **Service Categories Table**
+```sql
+- id: SERIAL PRIMARY KEY
+- name: VARCHAR(100)
+- description: TEXT
+- icon: VARCHAR(50) (emoji)
+- gradient: VARCHAR(200) (CSS gradient)
+- created_at: TIMESTAMP
+- updated_at: TIMESTAMP
+```
 
-### Service Subcategories
-- `id`: ObjectId
-- `name`: String
-- `description`: String
-- `category`: ObjectId (reference to ServiceCategory)
-- `price`: Decimal
+### **Service Subcategories Table**
+```sql
+- id: SERIAL PRIMARY KEY
+- name: VARCHAR(100)
+- description: TEXT
+- price: DECIMAL(10,2)
+- category_id: INTEGER (FK to service_categories)
+- created_at: TIMESTAMP
+- updated_at: TIMESTAMP
+```
 
-### Bookings
-- `id`: ObjectId
-- `user`: ObjectId (reference to User)
-- `subcategory`: ObjectId (reference to ServiceSubcategory)
-- `service_date`: DateTime
-- `status`: String (pending, confirmed, completed, cancelled)
-- `notes`: String
-- `created_at`: DateTime
-- `updated_at`: DateTime
+### **Bookings Table**
+```sql
+- id: SERIAL PRIMARY KEY
+- customer: VARCHAR(150) (username)
+- provider: VARCHAR(150) (username, nullable)
+- subcategory_id: INTEGER (FK to service_subcategories)
+- booking_date: TIMESTAMP
+- service_date: TIMESTAMP
+- total_price: DECIMAL(10,2)
+- status: VARCHAR(20) (pending, accepted, completed, cancelled)
+- payment_status: VARCHAR(20) (unpaid, paid)
+- payment_method: VARCHAR(20) (cod, online)
+- notes: TEXT
+- declined_by: TEXT (JSON array of usernames)
+- created_at: TIMESTAMP
+- updated_at: TIMESTAMP
+```
 
----
-
-## Troubleshooting
-
-### Common Issues
-
-1. **MongoDB Connection Error**
-   - Check your `.env` file and ensure `MONGO_URI` is correct
-   - Verify MongoDB is running and accessible
-
-2. **Frontend Not Loading Services**
-   - Ensure backend server is running on port 8000
-   - Check browser console for CORS errors
-   - Verify API endpoints are accessible
-
-3. **Authentication Issues**
-   - Clear browser localStorage and try logging in again
-   - Check if JWT tokens are being stored correctly
-
-4. **Port Already in Use**
-   - Backend: Change port in `manage.py runserver 8001`
-   - Frontend: Change port in `package.json` scripts
-
-### Development Tips
-
-1. **Backend Development**
-   - Use Django's built-in admin interface for data management
-   - Check Django logs for detailed error messages
-   - Use `python manage.py shell` for database queries
-
-2. **Frontend Development**
-   - Use browser dev tools to debug API calls
-   - Check Network tab for request/response details
-   - Use React dev tools for component debugging
+### **User Registered Services Table**
+```sql
+- id: SERIAL PRIMARY KEY
+- user_id: INTEGER (FK to auth_user)
+- service_id: INTEGER (FK to service_subcategories)
+- created_at: TIMESTAMP
+```
 
 ---
 
-## Contributing
+## 🔧 **Troubleshooting**
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
+### **Common Issues**
+
+#### **Database Connection Error**
+```bash
+# Check PostgreSQL is running
+sudo service postgresql status
+
+# Check database exists
+psql -U postgres -l
+
+# Test connection
+python manage.py dbshell
+```
+
+#### **Frontend Not Loading Services**
+```bash
+# Check backend is running
+curl http://localhost:8000/api/bookings/categories/
+
+# Check CORS settings in backend/settings.py
+CORS_ALLOWED_ORIGINS = ["http://localhost:3000"]
+```
+
+#### **Authentication Issues**
+```bash
+# Clear browser storage
+# Open DevTools → Application → Storage → Clear All
+
+# Check JWT token format
+curl -H "Authorization: Bearer <token>" http://localhost:8000/api/auth/me/
+```
+
+#### **Port Already in Use**
+```bash
+# Backend (change port)
+python manage.py runserver 8001
+
+# Frontend (change port)
+npm run dev -- -p 3001
+```
+
+### **Development Commands**
+
+```bash
+# Backend
+python manage.py makemigrations    # Create migrations
+python manage.py migrate           # Apply migrations
+python manage.py shell            # Django shell
+python manage.py collectstatic    # Collect static files
+
+# Frontend
+npm run build                      # Build for production
+npm run start                      # Start production server
+npm run lint                       # Run linting
+```
+
+### **Useful Scripts**
+
+```bash
+# Populate database with services
+python update_services_database.py
+
+# Create test users
+python create_test_users_postgresql.py
+
+# Check database status
+python manage.py dbshell
+```
 
 ---
 
-## License
+## 🤝 **Contributing**
 
-This project is licensed under the MIT License. 
+1. **Fork** the repository
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
+3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
+4. **Push** to the branch (`git push origin feature/amazing-feature`)
+5. **Open** a Pull Request
+
+### **Development Guidelines**
+- Follow PEP 8 for Python code
+- Use TypeScript for frontend components
+- Write descriptive commit messages
+- Test thoroughly before submitting
+
+---
+
+## 📄 **License**
+
+This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🙏 **Acknowledgments**
+
+- **Django REST Framework** for robust API development
+- **Next.js** for modern React framework
+- **PostgreSQL** for reliable data storage
+- **Tailwind CSS** concepts for styling inspiration
+
+---
+
+**Built with ❤️ for connecting customers with reliable home service providers**

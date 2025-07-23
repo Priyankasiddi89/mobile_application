@@ -1,32 +1,36 @@
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+# Clean PostgreSQL-only Service Provider Views
+from django.shortcuts import render
+from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.views import APIView
-from django.shortcuts import get_object_or_404
+from rest_framework.permissions import IsAuthenticated
+from bookings.models import Booking, ServiceSubcategory, UserRegisteredService
 from authentication.models import User
-from authentication.views import MongoengineJWTAuthentication
-from bookings.models import Booking, ServiceCategory, ServiceSubcategory
+from authentication.views import PostgreSQLJWTAuthentication
 from bookings.serializers import BookingSerializer, ServiceSubcategorySerializer
 from datetime import datetime, timedelta
 from decimal import Decimal
 
 class ProviderProfileView(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [MongoengineJWTAuthentication]
+    authentication_classes = [PostgreSQLJWTAuthentication]
 
     def get(self, request):
         """Get current provider profile information"""
         user = request.user
 
-        # Get provider statistics
-        total_bookings = Booking.objects(provider=user.username).count()
-        completed_bookings = Booking.objects(provider=user.username, status='completed').count()
-        active_bookings = Booking.objects(provider=user.username, status__in=['accepted', 'confirmed']).count()
+        # Get provider statistics using Django ORM
+        total_bookings = Booking.objects.filter(provider=user.username).count()
+        completed_bookings = Booking.objects.filter(provider=user.username, status='completed').count()
+        active_bookings = Booking.objects.filter(provider=user.username, status__in=['accepted', 'confirmed']).count()
 
         # Calculate total earnings
-        completed_bookings_list = Booking.objects(provider=user.username, status='completed')
+        completed_bookings_list = Booking.objects.filter(provider=user.username, status='completed')
         total_earnings = sum([booking.total_price for booking in completed_bookings_list])
+
+        # Get registered services using UserRegisteredService model
+        registered_service_relations = UserRegisteredService.objects.filter(user=user)
+        registered_services_ids = [str(urs.service.id) for urs in registered_service_relations]
 
         return Response({
             'id': str(user.id),
@@ -34,7 +38,7 @@ class ProviderProfileView(APIView):
             'user_type': user.user_type,
             'role': user.role,
             'is_active': user.is_active,
-            'registered_services': [str(service.id) for service in user.registered_services],
+            'registered_services': registered_services_ids,
             'statistics': {
                 'total_bookings': total_bookings,
                 'completed_bookings': completed_bookings,
@@ -46,57 +50,86 @@ class ProviderProfileView(APIView):
 
 class ProviderIncomingRequestsView(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [MongoengineJWTAuthentication]
+    authentication_classes = [PostgreSQLJWTAuthentication]
 
     def get(self, request):
         """Get incoming booking requests for the current provider"""
-        user = request.user
+        try:
+            user = request.user
+            print(f"🔍 Getting requests for provider: {user.username}")
 
-        # Get user's registered services
-        registered_service_ids = [str(service.id) for service in user.registered_services]
+            # Get user's registered services using UserRegisteredService model
+            registered_service_relations = UserRegisteredService.objects.filter(user=user)
+            registered_services = [urs.service for urs in registered_service_relations]
 
-        if not registered_service_ids:
-            # If provider has no registered services, return empty list
-            return Response([])
+            print(f"🔧 Provider registered for {len(registered_services)} services")
 
-        # Get bookings that are:
-        # - pending status
-        # - no provider assigned (provider=None)
-        # - haven't been declined by this provider
-        # - for services this provider is registered for
-        requests = Booking.objects(
-            status='pending',
-            provider=None,
-            declined_by__ne=user.username,
-            subcategory__in=user.registered_services
-        ).order_by('-created_at')
+            if not registered_services:
+                print("❌ No registered services, returning empty list")
+                return Response([])
 
-        serializer = BookingSerializer(requests, many=True)
-        return Response(serializer.data)
+            # Get all pending bookings for registered services
+            requests = Booking.objects.filter(
+                status='pending',
+                provider__isnull=True,
+                subcategory__in=registered_services
+            ).order_by('-created_at')
+
+            print(f"📋 Found {len(requests)} pending requests")
+
+            # Filter out requests declined by this provider
+            filtered_requests = []
+            for booking in requests:
+                try:
+                    declined_providers = booking.get_declined_providers()
+                    print(f"   📋 Booking {booking.id}:")
+                    print(f"      declined_by field: '{booking.declined_by}' (type: {type(booking.declined_by)})")
+                    print(f"      get_declined_providers(): {declined_providers} (type: {type(declined_providers)})")
+                    print(f"      user.username: '{user.username}' (type: {type(user.username)})")
+                    print(f"      user.username in declined_providers: {user.username in declined_providers}")
+
+                    if user.username not in declined_providers:
+                        filtered_requests.append(booking)
+                        print(f"      ✅ INCLUDING booking {booking.id}")
+                    else:
+                        print(f"      ❌ EXCLUDING booking {booking.id} (declined by {user.username})")
+                except Exception as e:
+                    print(f"      ⚠️ Error processing booking {booking.id}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # If there's an issue with declined providers, include the request
+                    filtered_requests.append(booking)
+
+            print(f"🔧 Returning {len(filtered_requests)} filtered requests")
+
+            # Use BookingSerializer for consistent response format
+            serializer = BookingSerializer(filtered_requests, many=True)
+            return Response(serializer.data)
+            
+        except Exception as e:
+            print(f"Error in ProviderIncomingRequestsView: {e}")
+            import traceback
+            traceback.print_exc()
+            return Response([], status=status.HTTP_200_OK)
 
 class ProviderServicesView(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [MongoengineJWTAuthentication]
+    authentication_classes = [PostgreSQLJWTAuthentication]
 
     def get(self, request):
         """Get services registered by the current provider"""
         try:
             user = request.user
-            print(f"🔧 Getting registered services for provider: {user.username}")
-            print(f"🔧 User object: {user}")
-            print(f"🔧 User type: {type(user)}")
+            print(f"Getting registered services for provider: {user.username}")
 
-            # Check if user has registered_services attribute
-            if not hasattr(user, 'registered_services'):
-                print(f"❌ User {user.username} has no registered_services attribute")
-                return Response([])
+            # Get registered services for this provider using UserRegisteredService model
+            registered_service_relations = UserRegisteredService.objects.filter(user=user)
+            registered_services = [urs.service for urs in registered_service_relations]
 
-            # Get registered services for this provider
-            registered_services = user.registered_services
-            print(f"🔧 Provider has {len(registered_services) if registered_services else 0} registered services")
+            print(f"Provider has {len(registered_services)} registered services")
 
             if not registered_services:
-                print(f"🔧 No registered services found, returning empty list")
+                print(f"No registered services found, returning empty list")
                 return Response([])
 
             services_data = []
@@ -110,7 +143,7 @@ class ProviderServicesView(APIView):
                         'description': getattr(service, 'description', ''),
                         'price': float(getattr(service, 'price', 0)),
                     }
-
+                    
                     # Safely access category
                     if hasattr(service, 'category') and service.category:
                         try:
@@ -120,7 +153,7 @@ class ProviderServicesView(APIView):
                                 'description': getattr(service.category, 'description', '')
                             }
                         except Exception as cat_error:
-                            print(f"   ⚠️ Error accessing category for service {service.id}: {cat_error}")
+                            print(f"Error accessing category for service {service.id}: {cat_error}")
                             service_data['category'] = {
                                 'id': 'unknown',
                                 'name': 'Unknown Category',
@@ -132,32 +165,20 @@ class ProviderServicesView(APIView):
                             'name': 'Unknown Category',
                             'description': ''
                         }
-
+                    
                     services_data.append(service_data)
-                    print(f"   ✅ Added service: {service_data['name']}")
+                    print(f"Added service: {service_data['name']}")
                 except Exception as e:
-                    print(f"   ❌ Error processing service {service.id}: {e}")
-                    # Add a fallback service entry
-                    services_data.append({
-                        'id': str(getattr(service, 'id', 'unknown')),
-                        'name': 'Error Loading Service',
-                        'description': 'Error loading service details',
-                        'price': 0.0,
-                        'category': {
-                            'id': 'unknown',
-                            'name': 'Unknown Category',
-                            'description': ''
-                        }
-                    })
+                    print(f"Error processing service {service.id}: {e}")
 
-            print(f"🔧 Returning {len(services_data)} services")
+            print(f"Returning {len(services_data)} services")
             return Response(services_data)
-
+            
         except Exception as e:
-            print(f"❌ Error in ProviderServicesView.get: {e}")
+            print(f"Error in ProviderServicesView.get: {e}")
             import traceback
             traceback.print_exc()
-            return Response([], status=status.HTTP_200_OK)  # Return empty list instead of 500
+            return Response([], status=status.HTTP_200_OK)
 
     def post(self, request):
         """Register for a new service"""
@@ -167,17 +188,17 @@ class ProviderServicesView(APIView):
         if not service_id:
             return Response({'detail': 'Service ID is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        service = ServiceSubcategory.objects(id=service_id).first()
-        if not service:
+        try:
+            service = ServiceSubcategory.objects.get(id=service_id)
+        except ServiceSubcategory.DoesNotExist:
             return Response({'detail': 'Service not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Check if already registered
-        if service in user.registered_services:
+        # Check if already registered using UserRegisteredService
+        if UserRegisteredService.objects.filter(user=user, service=service).exists():
             return Response({'detail': 'Already registered for this service'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Add service to registered services
-        user.registered_services.append(service)
-        user.save()
+        UserRegisteredService.objects.create(user=user, service=service)
 
         return Response({'detail': 'Successfully registered for service'}, status=status.HTTP_201_CREATED)
 
@@ -189,350 +210,281 @@ class ProviderServicesView(APIView):
         if not service_id:
             return Response({'detail': 'Service ID is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-        service = ServiceSubcategory.objects(id=service_id).first()
-        if not service:
+        try:
+            service = ServiceSubcategory.objects.get(id=service_id)
+        except ServiceSubcategory.DoesNotExist:
             return Response({'detail': 'Service not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Remove service from registered services
-        if service in user.registered_services:
-            user.registered_services.remove(service)
-            user.save()
+        # Remove service from registered services using UserRegisteredService
+        registration = UserRegisteredService.objects.filter(user=user, service=service).first()
+        if registration:
+            registration.delete()
             return Response({'detail': 'Successfully unregistered from service'}, status=status.HTTP_200_OK)
 
         return Response({'detail': 'Not registered for this service'}, status=status.HTTP_400_BAD_REQUEST)
 
 class ProviderBookingsView(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [MongoengineJWTAuthentication]
+    authentication_classes = [PostgreSQLJWTAuthentication]
 
     def get(self, request):
         """Get all bookings for the current provider"""
         user = request.user
         booking_status = request.query_params.get('status', None)
 
+        print(f"Getting bookings for provider: {user.username}")
+
         # Filter bookings by status if provided
         if booking_status:
-            # Handle multiple statuses separated by comma
             if ',' in booking_status:
                 status_list = [status.strip() for status in booking_status.split(',')]
                 print(f"Filtering bookings for provider {user.username} with statuses: {status_list}")
-                bookings = Booking.objects(provider=user.username, status__in=status_list).order_by('-created_at')
+                bookings = Booking.objects.filter(provider=user.username, status__in=status_list).order_by('-created_at')
             else:
                 print(f"Filtering bookings for provider {user.username} with status: {booking_status}")
-                bookings = Booking.objects(provider=user.username, status=booking_status).order_by('-created_at')
+                bookings = Booking.objects.filter(provider=user.username, status=booking_status).order_by('-created_at')
         else:
             print(f"Getting all bookings for provider {user.username}")
-            bookings = Booking.objects(provider=user.username).order_by('-created_at')
+            bookings = Booking.objects.filter(provider=user.username).order_by('-created_at')
 
         print(f"Found {len(bookings)} bookings")
 
         serializer = BookingSerializer(bookings, many=True)
         return Response(serializer.data)
 
+# Accept and Decline Request Views
 class AcceptRequestView(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [MongoengineJWTAuthentication]
-
+    authentication_classes = [PostgreSQLJWTAuthentication]
+    
     def post(self, request, booking_id):
-        """Accept a pending request"""
-        user = request.user
-
-        booking = Booking.objects(id=booking_id, status='pending', provider=None).first()
-        if not booking:
+        """Accept a pending request (service provider)"""
+        try:
+            booking = Booking.objects.get(id=booking_id, status='pending', provider__isnull=True)
+        except Booking.DoesNotExist:
             return Response({'detail': 'Request not found or already accepted'}, status=status.HTTP_404_NOT_FOUND)
-
+        
         # Check if provider is registered for this service
-        if booking.subcategory not in user.registered_services:
+        user = request.user
+        if not UserRegisteredService.objects.filter(user=user, service=booking.subcategory).exists():
             return Response({'detail': 'You are not registered for this service'}, status=status.HTTP_400_BAD_REQUEST)
-
+        
         booking.status = 'accepted'
         booking.provider = user.username
         booking.save()
-
+        
         serializer = BookingSerializer(booking)
         return Response(serializer.data)
 
 class DeclineRequestView(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [MongoengineJWTAuthentication]
-
+    authentication_classes = [PostgreSQLJWTAuthentication]
+    
     def post(self, request, booking_id):
-        """Decline a pending request"""
-        user = request.user
-
-        booking = Booking.objects(id=booking_id, status='pending', provider=None).first()
-        if not booking:
+        """Decline a pending request (service provider)"""
+        try:
+            booking = Booking.objects.get(id=booking_id, status='pending', provider__isnull=True)
+        except Booking.DoesNotExist:
             return Response({'detail': 'Request not found or already accepted'}, status=status.HTTP_404_NOT_FOUND)
 
-        if user.username not in booking.declined_by:
-            booking.declined_by.append(user.username)
-            booking.save()
+        # Add to declined list
+        user = request.user
+        print(f"🚫 Provider {user.username} declining booking {booking_id}")
+        print(f"   Before decline - declined_by: {booking.declined_by}")
+
+        booking.add_declined_provider(user.username)
+
+        print(f"   After decline - declined_by: {booking.declined_by}")
+        print(f"   Declined providers list: {booking.get_declined_providers()}")
 
         serializer = BookingSerializer(booking)
-        return Response(serializer.data)
+        return Response({
+            'booking': serializer.data,
+            'message': 'Request declined successfully',
+            'declined_by': booking.get_declined_providers()
+        })
 
+# Additional views required by URLs
 class UpdateBookingStatusView(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [MongoengineJWTAuthentication]
+    authentication_classes = [PostgreSQLJWTAuthentication]
+
+    def post(self, request, booking_id):
+        """Update booking status"""
+        return self._update_status(request, booking_id)
 
     def put(self, request, booking_id):
-        """Update booking status (confirm, complete, etc.)"""
-        user = request.user
-        new_status = request.data.get('status')
-        payment_method = request.data.get('payment_method', 'online')  # 'online' or 'cod'
+        """Update booking status (PUT method)"""
+        return self._update_status(request, booking_id)
 
-        if not new_status:
-            return Response({'detail': 'Status is required'}, status=status.HTTP_400_BAD_REQUEST)
-
-        booking = Booking.objects(id=booking_id, provider=user.username).first()
-        if not booking:
+    def _update_status(self, request, booking_id):
+        """Common method to update booking status"""
+        try:
+            booking = Booking.objects.get(id=booking_id, provider=request.user.username)
+        except Booking.DoesNotExist:
             return Response({'detail': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Validate status transitions
-        valid_transitions = {
-            'accepted': ['confirmed', 'cancelled'],
-            'confirmed': ['completed', 'cancelled'],
-            'completed': [],  # No transitions from completed
-            'cancelled': []   # No transitions from cancelled
-        }
+        new_status = request.data.get('status')
+        if new_status in ['accepted', 'confirmed', 'completed', 'cancelled']:
+            booking.status = new_status
+            booking.save()
+            serializer = BookingSerializer(booking)
+            return Response(serializer.data)
 
-        if booking.status not in valid_transitions or new_status not in valid_transitions[booking.status]:
-            return Response({'detail': 'Invalid status transition'}, status=status.HTTP_400_BAD_REQUEST)
-
-        # Update booking status
-        booking.status = new_status
-
-        # If marking as completed, handle payment method
-        if new_status == 'completed':
-            if payment_method == 'cod':
-                booking.payment_status = 'paid'  # COD is considered paid upon completion
-                booking.payment_method = 'cod'
-            else:
-                booking.payment_status = 'pending'  # Online payment pending
-                booking.payment_method = 'online'
-
-        booking.save()
-
-        # Send notification to end user if completed
-        if new_status == 'completed':
-            self._notify_customer_completion(booking)
-
-        serializer = BookingSerializer(booking)
-        return Response(serializer.data)
-
-    def _notify_customer_completion(self, booking):
-        """Send notification to customer about service completion"""
-        # TODO: Implement actual notification system (email, SMS, push notification)
-        print(f"NOTIFICATION: Service '{booking.subcategory.name}' completed for customer {booking.customer}")
-        print(f"  - Booking ID: {booking.id}")
-        print(f"  - Total Amount: ${booking.total_price}")
-        print(f"  - Payment Status: {booking.payment_status}")
-        print(f"  - Payment Method: {getattr(booking, 'payment_method', 'online')}")
+        return Response({'detail': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
 
 class CompleteBookingView(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [MongoengineJWTAuthentication]
+    authentication_classes = [PostgreSQLJWTAuthentication]
 
     def post(self, request, booking_id):
-        """Mark booking as completed with payment method"""
-        user = request.user
-        payment_method = request.data.get('payment_method', 'online')  # 'online' or 'cod'
-
-        print(f"CompleteBookingView: Looking for booking {booking_id} for provider {user.username}")
-        print(f"Payment method: {payment_method}")
-
-        # Debug: Check if booking exists at all
-        booking_exists = Booking.objects(id=booking_id).first()
-        if booking_exists:
-            print(f"Booking exists with provider: {booking_exists.provider}")
-        else:
-            print(f"No booking found with ID: {booking_id}")
-
-        booking = Booking.objects(id=booking_id, provider=user.username).first()
-        if not booking:
-            print(f"Booking not found for provider {user.username}")
+        """Mark booking as completed with payment handling"""
+        try:
+            booking = Booking.objects.get(id=booking_id, provider=request.user.username)
+        except Booking.DoesNotExist:
             return Response({'detail': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        if booking.status not in ['accepted', 'confirmed']:
-            return Response({'detail': 'Booking cannot be completed from current status'},
-                          status=status.HTTP_400_BAD_REQUEST)
+        # Get payment method from request
+        payment_method = request.data.get('payment_method', 'cod')  # Default to COD
 
-        # Mark as completed
+        # Update booking status and payment info
         booking.status = 'completed'
+        booking.payment_method = payment_method
 
-        # Handle payment based on method
+        # If COD, mark as paid immediately
         if payment_method == 'cod':
-            booking.payment_status = 'paid'  # COD is considered paid upon completion
-            booking.payment_method = 'cod'
-            message = f'Service completed successfully! Payment of ${booking.total_price} collected via COD.'
+            booking.payment_status = 'paid'
         else:
-            booking.payment_status = 'pending'  # Online payment pending
-            booking.payment_method = 'online'
-            message = f'Service completed successfully! Customer needs to pay ${booking.total_price} online.'
+            booking.payment_status = 'pending'  # For online payments
 
         booking.save()
 
-        # Send notification to customer
-        self._notify_customer_completion(booking)
-
+        # Prepare response
         serializer = BookingSerializer(booking)
-        return Response({
-            'booking': serializer.data,
-            'message': message,
-            'payment_required': payment_method == 'online'
-        })
 
-    def _notify_customer_completion(self, booking):
-        """Send notification to customer about service completion"""
-        # TODO: Implement actual notification system (email, SMS, push notification)
-        print(f"NOTIFICATION: Service '{booking.subcategory.name}' completed for customer {booking.customer}")
-        print(f"  - Booking ID: {booking.id}")
-        print(f"  - Total Amount: ${booking.total_price}")
-        print(f"  - Payment Status: {booking.payment_status}")
-        print(f"  - Payment Method: {getattr(booking, 'payment_method', 'online')}")
+        # Calculate updated stats for response
+        user = request.user
+        total_bookings = Booking.objects.filter(provider=user.username).count()
+        completed_bookings = Booking.objects.filter(provider=user.username, status='completed').count()
+        active_bookings = Booking.objects.filter(provider=user.username, status__in=['accepted', 'confirmed']).count()
+
+        response_data = {
+            'booking': serializer.data,
+            'message': f'Service completed successfully! Payment of ${float(booking.total_price):.2f} {"collected via COD" if payment_method == "cod" else "pending online payment"}.',
+            'payment_required': payment_method != 'cod',
+            'updated_stats': {
+                'total_bookings': total_bookings,
+                'completed_bookings': completed_bookings,
+                'active_bookings': active_bookings
+            }
+        }
+
+        return Response(response_data)
 
 class ProcessPaymentView(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [MongoengineJWTAuthentication]
+    authentication_classes = [PostgreSQLJWTAuthentication]
 
     def post(self, request, booking_id):
-        """Process payment for completed booking (for end users)"""
-        user = request.user
-
-        booking = Booking.objects(id=booking_id, customer=user.username).first()
-        if not booking:
+        """Process payment for booking"""
+        try:
+            booking = Booking.objects.get(id=booking_id, provider=request.user.username)
+        except Booking.DoesNotExist:
             return Response({'detail': 'Booking not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        if booking.status != 'completed':
-            return Response({'detail': 'Booking must be completed before payment'},
-                          status=status.HTTP_400_BAD_REQUEST)
-
-        if booking.payment_status == 'paid':
-            return Response({'detail': 'Payment already processed'},
-                          status=status.HTTP_400_BAD_REQUEST)
-
-        # Process payment (simulate payment processing)
-        # TODO: Integrate with actual payment gateway
         booking.payment_status = 'paid'
         booking.save()
-
-        # Notify service provider about payment
-        print(f"NOTIFICATION: Payment of ${booking.total_price} received for booking {booking.id}")
-        print(f"  - Service Provider: {booking.provider}")
-        print(f"  - Service: {booking.subcategory.name}")
-
         serializer = BookingSerializer(booking)
-        return Response({
-            'booking': serializer.data,
-            'message': f'Payment of ${booking.total_price} processed successfully!'
-        })
+        return Response(serializer.data)
 
 class ProviderEarningsView(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [MongoengineJWTAuthentication]
+    authentication_classes = [PostgreSQLJWTAuthentication]
 
     def get(self, request):
-        """Get earnings statistics for the provider"""
+        """Get provider earnings with detailed breakdown"""
         user = request.user
 
-        # Get completed bookings
-        completed_bookings = Booking.objects(provider=user.username, status='completed')
+        # Get all completed bookings
+        completed_bookings = Booking.objects.filter(provider=user.username, status='completed')
+        total_earnings = sum([float(booking.total_price) if booking.total_price is not None else 0.0 for booking in completed_bookings])
 
-        # Calculate total earnings
-        total_earnings = sum([booking.total_price for booking in completed_bookings])
-
-        # Calculate monthly earnings (current month)
-        current_month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        monthly_bookings = completed_bookings.filter(created_at__gte=current_month_start)
-        monthly_earnings = sum([booking.total_price for booking in monthly_bookings])
-
-        # Calculate weekly earnings
-        week_start = datetime.now() - timedelta(days=7)
-        weekly_bookings = completed_bookings.filter(created_at__gte=week_start)
-        weekly_earnings = sum([booking.total_price for booking in weekly_bookings])
-
-        # Get earnings by service
+        # Calculate earnings by service
         earnings_by_service = {}
         for booking in completed_bookings:
-            service_name = booking.subcategory.name
+            service_name = booking.subcategory.name if booking.subcategory else 'Unknown Service'
             if service_name not in earnings_by_service:
                 earnings_by_service[service_name] = {
-                    'total': 0,
-                    'count': 0
+                    'total': 0.0,  # Frontend expects 'total', not 'earnings'
+                    'count': 0     # Frontend expects 'count', not 'jobs'
                 }
-            earnings_by_service[service_name]['total'] += float(booking.total_price)
+            # Safely handle total_price
+            price = float(booking.total_price) if booking.total_price is not None else 0.0
+            earnings_by_service[service_name]['total'] += price
             earnings_by_service[service_name]['count'] += 1
 
+        # For now, return total earnings (weekly/monthly can be added later)
         return Response({
             'total_earnings': float(total_earnings),
-            'monthly_earnings': float(monthly_earnings),
-            'weekly_earnings': float(weekly_earnings),
             'total_completed_jobs': len(completed_bookings),
-            'monthly_completed_jobs': len(monthly_bookings),
-            'weekly_completed_jobs': len(weekly_bookings),
-            'earnings_by_service': earnings_by_service
+            'weekly_earnings': float(total_earnings),  # TODO: Calculate actual weekly
+            'weekly_completed_jobs': len(completed_bookings),  # TODO: Calculate actual weekly
+            'monthly_earnings': float(total_earnings),  # TODO: Calculate actual monthly
+            'monthly_completed_jobs': len(completed_bookings),  # TODO: Calculate actual monthly
+            'earnings_by_service': earnings_by_service if earnings_by_service else {}
         })
 
 class ProviderDashboardStatsView(APIView):
     permission_classes = [IsAuthenticated]
-    authentication_classes = [MongoengineJWTAuthentication]
+    authentication_classes = [PostgreSQLJWTAuthentication]
 
     def get(self, request):
-        """Get dashboard statistics for the provider"""
+        """Get provider dashboard statistics"""
         user = request.user
 
-        # Get all bookings for this provider
-        all_bookings = Booking.objects(provider=user.username)
+        # Get registered services for this provider
+        registered_service_relations = UserRegisteredService.objects.filter(user=user)
+        registered_services = [urs.service for urs in registered_service_relations]
 
-        # Only show pending requests for services this provider is registered for
-        if user.registered_services:
-            pending_requests = Booking.objects(
+        total_bookings = Booking.objects.filter(provider=user.username).count()
+        active_bookings = Booking.objects.filter(provider=user.username, status__in=['accepted', 'confirmed']).count()
+        completed_bookings = Booking.objects.filter(provider=user.username, status='completed').count()
+
+        # Only count pending requests for services this provider is registered for
+        # AND filter out requests this provider has declined
+        if registered_services:
+            pending_requests_queryset = Booking.objects.filter(
                 status='pending',
-                provider=None,
-                declined_by__ne=user.username,
-                subcategory__in=user.registered_services
+                provider__isnull=True,
+                subcategory__in=registered_services
             )
+
+            # Filter out requests declined by this provider
+            filtered_pending_requests = []
+            for booking in pending_requests_queryset:
+                try:
+                    declined_providers = booking.get_declined_providers()
+                    if user.username not in declined_providers:
+                        filtered_pending_requests.append(booking)
+                except:
+                    # If there's an issue with declined providers, include the request
+                    filtered_pending_requests.append(booking)
+
+            pending_requests = len(filtered_pending_requests)
         else:
-            pending_requests = []  # No registered services = no pending requests
+            pending_requests = 0
 
-        active_bookings = Booking.objects(provider=user.username, status__in=['accepted', 'confirmed'])
-        completed_bookings = Booking.objects(provider=user.username, status='completed')
-
-        # Debug logging
-        print(f"Dashboard stats for provider {user.username}:")
-        print(f"  - Registered services: {len(user.registered_services)}")
-        print(f"  - All bookings: {len(all_bookings)}")
-        print(f"  - Pending requests (filtered): {len(pending_requests)}")
-        print(f"  - Active bookings: {len(active_bookings)}")
-        print(f"  - Completed bookings: {len(completed_bookings)}")
-        if len(active_bookings) > 0:
-            print(f"  - Active booking statuses: {[booking.status for booking in active_bookings]}")
-        if len(pending_requests) > 0:
-            print(f"  - Pending request services: {[req.subcategory.name for req in pending_requests]}")
+        total_earnings = sum([float(booking.total_price) if booking.total_price is not None else 0.0 for booking in Booking.objects.filter(provider=user.username, status='completed')])
 
         # Calculate completion rate
-        total_bookings = len(all_bookings)
-        completion_rate = (len(completed_bookings) / total_bookings * 100) if total_bookings > 0 else 0
-
-        # Get recent activity (last 5 bookings)
-        recent_bookings = Booking.objects(provider=user.username).order_by('-created_at')[:5]
-        recent_activity = []
-        for booking in recent_bookings:
-            recent_activity.append({
-                'id': str(booking.id),
-                'service_name': booking.subcategory.name,
-                'customer_name': booking.customer,
-                'status': booking.status,
-                'created_at': booking.created_at.isoformat(),
-                'total_price': float(booking.total_price)
-            })
+        completion_rate = round((completed_bookings / total_bookings * 100) if total_bookings > 0 else 0, 2)
 
         return Response({
-            'pending_requests_count': len(pending_requests),
-            'active_bookings_count': len(active_bookings),
-            'completed_bookings_count': len(completed_bookings),
-            'total_bookings_count': total_bookings,
-            'completion_rate': round(completion_rate, 2),
-            'registered_services_count': len(user.registered_services),
-            'recent_activity': recent_activity
+            'total_bookings': total_bookings,
+            'pending_requests_count': pending_requests,
+            'active_bookings_count': active_bookings,
+            'completed_bookings_count': completed_bookings,
+            'total_earnings': float(total_earnings),
+            'completion_rate': completion_rate,
+            'registered_services_count': len(registered_services)
         })
