@@ -13,9 +13,18 @@ home-services-platform/
 ├── 📁 backend/                           # Django project settings
 │   ├── __init__.py
 │   ├── settings.py                       # Main configuration
-│   ├── urls.py                          # Root URL routing
+│   ├── urls.py                          # Root URL routing (API-first)
 │   ├── wsgi.py                          # WSGI configuration
-│   └── asgi.py                          # ASGI configuration
+│   ├── asgi.py                          # ASGI configuration
+│   ├── 📄 API_DOCUMENTATION.md          # Complete API documentation
+│   │
+│   └── 📁 api/                          # 🚀 API-First Architecture
+│       ├── __init__.py
+│       ├── urls.py                      # API URL routing
+│       ├── auth.py                      # Authentication endpoints
+│       ├── services.py                  # Service management endpoints
+│       ├── bookings.py                  # Booking management endpoints
+│       └── analytics.py                 # Dashboard analytics endpoints
 │
 ├── 📁 authentication/                    # User management app
 │   ├── models.py                        # User model
@@ -58,6 +67,9 @@ home-services-platform/
 │   │   ├── end_user_dashboard/         # Customer dashboard
 │   │   └── service_provider_dashboard/ # Provider dashboard
 │   │
+│   ├── 📁 lib/                         # Utility libraries
+│   │   └── api-client.ts               # 🚀 API Client (TypeScript)
+│   │
 │   ├── 📁 public/                      # Static assets
 │   └── 📁 node_modules/                # Node.js packages
 │
@@ -66,34 +78,41 @@ home-services-platform/
 
 ## 🔧 Key Files & Their Purpose
 
+### **🚀 API-First Backend**
+- `backend/api/auth.py` - Authentication endpoints (register, login, profile)
+- `backend/api/services.py` - Service management endpoints (categories, registration)
+- `backend/api/bookings.py` - Booking management endpoints (create, accept, complete)
+- `backend/api/analytics.py` - Dashboard analytics endpoints (stats, earnings)
+- `backend/api/urls.py` - API URL routing configuration
+- `backend/API_DOCUMENTATION.md` - Complete API documentation
+
 ### **Backend Core**
 - `manage.py` - Django management commands
 - `backend/settings.py` - Database, CORS, JWT configuration
-- `backend/urls.py` - Main API routing
+- `backend/urls.py` - Main URL routing (API + legacy endpoints)
 
-### **Authentication System**
+### **Database Models**
 - `authentication/models.py` - User model with roles
-- `authentication/views.py` - Login, register, profile APIs
-- `authentication/serializers.py` - User data validation
-
-### **Booking System**
 - `bookings/models.py` - Service categories, bookings, user services
-- `bookings/views.py` - Service catalog, booking creation APIs
-- `bookings/serializers.py` - Data transformation for APIs
-
-### **Dashboard APIs**
-- `end_user_dashboard/views.py` - Customer booking management
-- `service_provider/dashboard/views.py` - Provider request management
-- `platform_provider_dashboard/views.py` - Admin system management
+- `authentication/serializers.py` - User data serialization
+- `bookings/serializers.py` - Booking data serialization
 
 ### **Frontend Application**
+- `frontend/lib/api-client.ts` - 🚀 TypeScript API client
 - `frontend/app/layout.tsx` - Global layout and navigation
 - `frontend/app/end_user_dashboard/` - Customer interface
 - `frontend/app/service_provider_dashboard/` - Provider interface
 
-### **Database Setup**
+### **Database Setup & Utilities**
 - `create_test_users_postgresql.py` - Creates demo accounts
 - `update_services_database.py` - Populates service catalog
+- `update_frontend_api_calls.py` - Updates frontend to use new APIs
+
+### **Legacy Endpoints (Backward Compatibility)**
+- `authentication/views.py` - Legacy auth endpoints
+- `bookings/views.py` - Legacy booking endpoints
+- `end_user_dashboard/views.py` - Legacy customer endpoints
+- `service_provider/dashboard/views.py` - Legacy provider endpoints
 
 ## 🗄️ Database Tables
 

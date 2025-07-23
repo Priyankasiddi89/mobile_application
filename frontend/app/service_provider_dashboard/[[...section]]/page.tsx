@@ -68,7 +68,7 @@ export default function ProviderDashboardCatchAll() {
     const token = localStorage.getItem("access_token");
     if (!token) return;
 
-    fetch("http://localhost:8000/api/service_provider_dashboard/requests/", {
+    fetch("http://localhost:8000/api/bookings/provider/requests/", {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -339,7 +339,7 @@ function ServiceProviderHome({ user }: { user: User }) {
     const token = localStorage.getItem("access_token");
     if (!token) return;
 
-    fetch("http://localhost:8000/api/service_provider_dashboard/stats/", {
+    fetch("http://localhost:8000/api/analytics/provider/dashboard/", {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -654,7 +654,7 @@ function IncomingRequests({ user }: { user: User }) {
     const token = localStorage.getItem("access_token");
     if (!token) return;
 
-    fetch("http://localhost:8000/api/service_provider_dashboard/requests/", {
+    fetch("http://localhost:8000/api/bookings/provider/requests/", {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -676,7 +676,7 @@ function IncomingRequests({ user }: { user: User }) {
     const token = localStorage.getItem("access_token");
 
     try {
-      const response = await fetch(`http://localhost:8000/api/service_provider_dashboard/accept/${bookingId}/`, {
+      const response = await fetch(`http://localhost:8000/api/bookings/${bookingId}/accept/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -703,7 +703,7 @@ function IncomingRequests({ user }: { user: User }) {
     const token = localStorage.getItem("access_token");
 
     try {
-      const response = await fetch(`http://localhost:8000/api/service_provider_dashboard/decline/${bookingId}/`, {
+      const response = await fetch(`http://localhost:8000/api/bookings/${bookingId}/decline/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -844,11 +844,11 @@ function ServicesSection({ user }: { user: User }) {
 
     // Fetch registered services, available services, and categories
     Promise.all([
-      fetch("http://localhost:8000/api/service_provider_dashboard/services/", {
+      fetch("http://localhost:8000/api/services/provider/registered/", {
         headers: { Authorization: `Bearer ${token}` },
       }),
-      fetch("http://localhost:8000/api/bookings/subcategories/"),  // No auth needed for public endpoints
-      fetch("http://localhost:8000/api/bookings/categories/")      // No auth needed for public endpoints
+      fetch("http://localhost:8000/api/services/subcategories/"),  // No auth needed for public endpoints
+      fetch("http://localhost:8000/api/services/categories/")      // No auth needed for public endpoints
     ])
       .then(([registeredRes, availableRes, categoriesRes]) => {
         // Check if responses are ok
@@ -907,7 +907,7 @@ function ServicesSection({ user }: { user: User }) {
     const token = localStorage.getItem("access_token");
 
     try {
-      const response = await fetch("http://localhost:8000/api/service_provider_dashboard/services/", {
+      const response = await fetch("http://localhost:8000/api/services/provider/register/", {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -942,7 +942,7 @@ function ServicesSection({ user }: { user: User }) {
     const token = localStorage.getItem("access_token");
 
     try {
-      const response = await fetch("http://localhost:8000/api/service_provider_dashboard/services/", {
+      const response = await fetch("http://localhost:8000/api/services/provider/unregister/", {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1724,7 +1724,7 @@ function ActiveBookings({ user }: { user: User }) {
     const token = localStorage.getItem("access_token");
     if (!token) return;
 
-    fetch("http://localhost:8000/api/service_provider_dashboard/bookings/?status=accepted,confirmed", {
+    fetch("http://localhost:8000/api/bookings/provider/?status=active", {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -1752,7 +1752,7 @@ function ActiveBookings({ user }: { user: User }) {
     const token = localStorage.getItem("access_token");
 
     try {
-      const response = await fetch(`http://localhost:8000/api/service_provider_dashboard/booking/${bookingId}/status/`, {
+      const response = await fetch(`http://localhost:8000/api/bookings/${bookingId}/status/`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1781,7 +1781,7 @@ function ActiveBookings({ user }: { user: User }) {
     const token = localStorage.getItem("access_token");
 
     try {
-      const url = `http://localhost:8000/api/service_provider_dashboard/booking/${bookingId}/complete/`;
+      const url = `http://localhost:8000/api/bookings/${bookingId}/complete/`;
       console.log('API URL:', url);
 
       const response = await fetch(url, {
@@ -2155,7 +2155,7 @@ function PreviousBookings({ user }: { user: User }) {
     const token = localStorage.getItem("access_token");
     if (!token) return;
 
-    fetch("http://localhost:8000/api/service_provider_dashboard/bookings/?status=completed,cancelled", {
+    fetch("http://localhost:8000/api/bookings/provider/?status=completed", {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -2249,20 +2249,23 @@ function EarningsSection({ user }: { user: User }) {
 
     // Fetch both earnings and analytics data
     Promise.all([
-      fetch("http://localhost:8000/api/service_provider_dashboard/earnings/", {
+      fetch("http://localhost:8000/api/analytics/provider/earnings/", {
         headers: { Authorization: `Bearer ${token}` },
       }),
-      fetch("http://localhost:8000/api/service_provider_dashboard/stats/", {
+      fetch("http://localhost:8000/api/analytics/provider/dashboard/", {
         headers: { Authorization: `Bearer ${token}` },
       })
     ])
       .then(([earningsRes, analyticsRes]) => Promise.all([earningsRes.json(), analyticsRes.json()]))
       .then(([earningsData, analyticsData]) => {
+        console.log('Earnings data received:', earningsData);
+        console.log('Analytics data received:', analyticsData);
         setEarnings(earningsData);
         setAnalytics(analyticsData);
         setLoading(false);
       })
-      .catch(() => {
+      .catch((error) => {
+        console.error('Error fetching earnings/analytics:', error);
         setLoading(false);
       });
   }, []);
@@ -2448,7 +2451,7 @@ function EarningsSection({ user }: { user: User }) {
         </div>
       </div>
 
-      {earnings?.earnings_by_service && Object.keys(earnings.earnings_by_service).length > 0 && (
+      {earnings?.earnings_by_service && typeof earnings.earnings_by_service === 'object' && Object.keys(earnings.earnings_by_service).length > 0 && (
         <div style={{ background: 'white', borderRadius: 16, padding: 32, boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)' }}>
           <h3 style={{ fontSize: '1.3rem', fontWeight: 600, marginBottom: 24, color: '#2c3e50' }}>Earnings by Service</h3>
           <div style={{ display: 'grid', gap: '12px' }}>
@@ -2464,10 +2467,10 @@ function EarningsSection({ user }: { user: User }) {
               }}>
                 <div>
                   <h4 style={{ margin: '0 0 4px 0', color: '#2c3e50' }}>{serviceName}</h4>
-                  <div style={{ fontSize: '14px', color: '#6c757d' }}>{data.count} jobs completed</div>
+                  <div style={{ fontSize: '14px', color: '#6c757d' }}>{data?.count || 0} jobs completed</div>
                 </div>
                 <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#28a745' }}>
-                  ${data.total.toFixed(2)}
+                  ${(data?.total || 0).toFixed(2)}
                 </div>
               </div>
             ))}

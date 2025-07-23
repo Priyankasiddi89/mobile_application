@@ -1,26 +1,28 @@
-"""backend URL Configuration
+"""
+Backend URL Configuration for Home Services Platform
 
-The `urlpatterns` list routes URLs to views. For more information please see:
-    https://docs.djangoproject.com/en/4.1/topics/http/urls/
-Examples:
-Function views
-    1. Add an import:  from my_app import views
-    2. Add a URL to urlpatterns:  path('', views.home, name='home')
-Class-based views
-    1. Add an import:  from other_app.views import Home
-    2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
-Including another URLconf
-    1. Import the include() function: from django.urls import include, path
-    2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
+This configuration provides a clean API-first architecture where all database
+interactions happen through well-defined API endpoints.
+
+API Structure:
+- /api/ - All API endpoints (backend/api/)
+- /admin/ - Django admin interface
+- /legacy/ - Legacy endpoints (for backward compatibility)
 """
 from django.contrib import admin
 from django.urls import path, include
 
 urlpatterns = [
+    # Django Admin Interface
     path('admin/', admin.site.urls),
-    path('api/auth/', include('authentication.urls')),
-    path('api/bookings/', include('bookings.urls')),
-    path('api/end_user_dashboard/', include('end_user_dashboard.urls')),
-    path('api/service_provider_dashboard/', include('service_provider.dashboard.urls')),
-    path('api/platform_provider_dashboard/', include('platform_provider_dashboard.urls')),
+
+    # Main API Endpoints (API-First Architecture)
+    path('api/', include('backend.api.urls')),
+
+    # Legacy Endpoints (for backward compatibility)
+    path('legacy/auth/', include('authentication.urls')),
+    path('legacy/bookings/', include('bookings.urls')),
+    path('legacy/end_user_dashboard/', include('end_user_dashboard.urls')),
+    path('legacy/service_provider_dashboard/', include('service_provider.dashboard.urls')),
+    path('legacy/platform_provider_dashboard/', include('platform_provider_dashboard.urls')),
 ]

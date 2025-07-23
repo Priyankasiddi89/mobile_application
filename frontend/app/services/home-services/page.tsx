@@ -38,14 +38,14 @@ export default function HomeServices() {
 
   const fetchCategories = async () => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/bookings/categories/");
+      const response = await fetch("http://127.0.0.1:8000/api/services/categories/");
       if (response.ok) {
         const categoriesData = await response.json();
         
         // Fetch subcategories for each category
         const categoriesWithSubcategories = await Promise.all(
           categoriesData.map(async (category: any) => {
-            const subResponse = await fetch(`http://127.0.0.1:8000/api/bookings/subcategories/?category_id=${category.id}`);
+            const subResponse = await fetch(`http://127.0.0.1:8000/api/services/subcategories/?category_id=${category.id}`);
             if (subResponse.ok) {
               const subcategories = await subResponse.json();
               return {

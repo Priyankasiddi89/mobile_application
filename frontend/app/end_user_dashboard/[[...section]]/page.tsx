@@ -325,8 +325,8 @@ function MainDashboard({ user }: { user: User }) {
       console.log('🚀 Starting to fetch categories and subcategories...');
       try {
         // Fetch categories (no authentication required)
-        console.log('📋 Fetching categories from:', "http://localhost:8000/api/bookings/categories/");
-        const categoriesResponse = await fetch("http://localhost:8000/api/bookings/categories/");
+        console.log('📋 Fetching categories from:', "http://localhost:8000/api/services/categories/");
+        const categoriesResponse = await fetch("http://localhost:8000/api/services/categories/");
         console.log('📋 Categories response status:', categoriesResponse.status);
 
         if (categoriesResponse.ok) {
@@ -344,8 +344,8 @@ function MainDashboard({ user }: { user: User }) {
         }
 
         // Fetch all subcategories (no authentication required)
-        console.log('🔧 Fetching subcategories from:', "http://localhost:8000/api/bookings/subcategories/");
-        const subcategoriesResponse = await fetch("http://localhost:8000/api/bookings/subcategories/");
+        console.log('🔧 Fetching subcategories from:', "http://localhost:8000/api/services/subcategories/");
+        const subcategoriesResponse = await fetch("http://localhost:8000/api/services/subcategories/");
         console.log('🔧 Subcategories response status:', subcategoriesResponse.status);
 
         if (subcategoriesResponse.ok) {
@@ -751,7 +751,7 @@ function BookingsSection({ user }: { user: User }) {
     const token = localStorage.getItem("access_token");
     if (!token) return;
 
-    fetch("http://localhost:8000/api/end_user_dashboard/bookings/", {
+    fetch("http://localhost:8000/api/bookings/user/", {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => res.json())
@@ -829,7 +829,7 @@ function RequestsSection({ user }: { user: User }) {
       try {
         console.log('📋 Fetching user bookings...');
         // Fetch bookings from backend API
-        const response = await fetch("http://localhost:8000/api/end_user_dashboard/bookings/", {
+        const response = await fetch("http://localhost:8000/api/bookings/user/", {
           headers: { Authorization: `Bearer ${token}` },
         });
 
@@ -1182,14 +1182,14 @@ function ServicesSection({ user }: { user: User }) {
     const fetchData = async () => {
       try {
         // Fetch categories (no authentication required)
-        const categoriesResponse = await fetch("http://localhost:8000/api/bookings/categories/");
+        const categoriesResponse = await fetch("http://localhost:8000/api/services/categories/");
         if (categoriesResponse.ok) {
           const categoriesData = await categoriesResponse.json();
           setCategories(categoriesData);
         }
 
         // Fetch all subcategories (no authentication required)
-        const subcategoriesResponse = await fetch("http://localhost:8000/api/bookings/subcategories/");
+        const subcategoriesResponse = await fetch("http://localhost:8000/api/services/subcategories/");
         if (subcategoriesResponse.ok) {
           const subcategoriesData = await subcategoriesResponse.json();
           setSubcategories(subcategoriesData);

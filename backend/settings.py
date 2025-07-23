@@ -45,7 +45,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'authentication',
     'bookings',
-    'end_user',
+    'end_user_dashboard',
     'service_provider',
     'platform_provider_dashboard',
 ]
