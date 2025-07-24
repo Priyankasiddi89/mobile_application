@@ -109,7 +109,9 @@ def login_user(request):
                 'id': user.id,
                 'username': user.username,
                 'user_type': user.user_type,
-                'role': user.role
+                'role': user.role,
+                'is_superuser': user.is_superuser,
+                'is_staff': user.is_staff
             }
         }, status=status.HTTP_200_OK)
             

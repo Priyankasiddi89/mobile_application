@@ -30,6 +30,14 @@ export default function LoginPage() {
         headers: { Authorization: `Bearer ${data.access}` },
       });
       const user = await userRes.json();
+
+      // Check if user is a superuser - redirect to Django admin
+      if (user.is_superuser) {
+        window.location.href = "http://localhost:8000/admin/";
+        return;
+      }
+
+      // Regular user redirects
       if (user.user_type === "Service Provider") {
         router.push("/service_provider_dashboard");
       } else if (user.user_type === "Platform Provider" || user.user_type === "Admin") {

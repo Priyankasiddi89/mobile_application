@@ -8,6 +8,8 @@ class UserSerializer(serializers.Serializer):
     user_type = serializers.CharField(required=True)
     role = serializers.CharField(required=True)
     is_active = serializers.BooleanField(default=True)
+    is_superuser = serializers.BooleanField(read_only=True)
+    is_staff = serializers.BooleanField(read_only=True)
 
     def create(self, validated_data):
         user = User(**validated_data)
