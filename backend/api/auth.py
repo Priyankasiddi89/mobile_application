@@ -71,25 +71,27 @@ def login_user(request):
     try:
         username = request.data.get('username')
         password = request.data.get('password')
-        
+
         if not username or not password:
             return Response(
-                {'error': 'Username and password are required'}, 
+                {'error': 'Username and password are required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Authenticate user
-        try:
-            user = User.objects.get(username=username)
-        except User.DoesNotExist:
+        # Authenticate user using Django's built-in authentication
+        from django.contrib.auth import authenticate
+
+        user = authenticate(username=username, password=password)
+
+        if user is None:
             return Response(
                 {'error': 'Invalid credentials'},
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        if not check_password(password, user.password):
+        if not user.is_active:
             return Response(
-                {'error': 'Invalid credentials'},
+                {'error': 'Account is disabled'},
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
