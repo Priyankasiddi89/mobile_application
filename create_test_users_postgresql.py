@@ -97,8 +97,16 @@ def register_provider_for_services():
         for service in services:
             # Check if already registered
             if not UserRegisteredService.objects.filter(user=provider, service=service).exists():
-                UserRegisteredService.objects.create(user=provider, service=service)
-                print(f"   ✅ Registered for: {service.name}")
+                # Set provider price slightly different from base price
+                provider_price = float(service.price) + 50.00  # Add ₹50 to base price
+                UserRegisteredService.objects.create(
+                    user=provider,
+                    service=service,
+                    provider_price=provider_price,
+                    description=f"Professional {service.name.lower()} service by {provider.username}",
+                    is_available=True
+                )
+                print(f"   ✅ Registered for: {service.name} (₹{provider_price})")
                 registered_count += 1
             else:
                 print(f"   ✅ Already registered for: {service.name}")

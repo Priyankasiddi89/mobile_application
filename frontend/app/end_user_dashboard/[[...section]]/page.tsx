@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
+import BookingModal from "../../components/BookingModal";
 // EndUserSidebar component will be defined in this file
 
 interface User {
@@ -817,6 +818,7 @@ function BookingsSection({ user }: { user: User }) {
 function RequestsSection({ user }: { user: User }) {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancelLoading, setCancelLoading] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchRequests = async () => {
@@ -857,6 +859,72 @@ function RequestsSection({ user }: { user: User }) {
     fetchRequests();
   }, []);
 
+  const handleCancelRequest = async (requestId: string) => {
+    // Find the request to check its current status
+    const requestToCancel = requests.find(req => req.id === parseInt(requestId));
+
+    if (!requestToCancel) {
+      alert("❌ Request not found.");
+      return;
+    }
+
+    // Double-check the status before attempting to cancel
+    if (requestToCancel.status?.toLowerCase() === 'cancelled') {
+      alert("ℹ️ This request is already cancelled.");
+      return;
+    }
+
+    if (!['pending', 'accepted'].includes(requestToCancel.status?.toLowerCase())) {
+      alert(`ℹ️ Cannot cancel request with status: ${requestToCancel.status}. Only pending or accepted requests can be cancelled.`);
+      return;
+    }
+
+    const confirmCancel = window.confirm(`Are you sure you want to cancel this booking request?\n\nService: ${requestToCancel.subcategory_name}\nStatus: ${requestToCancel.status}\n\nThis action cannot be undone.`);
+
+    if (!confirmCancel) return;
+
+    setCancelLoading(requestId);
+
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        alert("Please log in to cancel requests.");
+        return;
+      }
+
+      console.log(`Attempting to cancel request ${requestId} with status: ${requestToCancel.status}`);
+
+      const response = await fetch(`http://localhost:8000/api/bookings/${requestId}/cancel/`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert("✅ Booking request cancelled successfully!");
+        // Update the request status to cancelled instead of removing it
+        const updatedRequests = requests.map(req =>
+          req.id === parseInt(requestId)
+            ? { ...req, status: 'cancelled' }
+            : req
+        );
+        setRequests(updatedRequests);
+      } else {
+        const errorData = await response.json();
+        console.error('Cancel request failed:', errorData);
+        alert(`❌ Failed to cancel request: ${errorData.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error cancelling request:', error);
+      alert("❌ Network error. Please try again.");
+    } finally {
+      setCancelLoading(null);
+    }
+  };
+
   if (loading) {
     return (
       <div style={{ 
@@ -892,6 +960,7 @@ function RequestsSection({ user }: { user: User }) {
       case 'confirmed': return '#2196F3';
       case 'completed': return '#4CAF50';
       case 'cancelled': return '#F44336';
+      case 'declined': return '#FF5722';
       default: return '#666';
     }
   };
@@ -1130,22 +1199,102 @@ function RequestsSection({ user }: { user: User }) {
                 </div>
               )}
               
-              <div style={{ 
-                background: 'linear-gradient(135deg, #f0f8ff 0%, #e3f2fd 100%)', 
-                padding: '15px', 
+              <div style={{
+                background: 'linear-gradient(135deg, #f0f8ff 0%, #e3f2fd 100%)',
+                padding: '15px',
                 borderRadius: 15,
                 borderLeft: '4px solid #667eea'
+              }}>
+                <strong style={{ color: '#333', fontSize: '0.9rem' }}>📍 Service Address:</strong>
+                <p style={{ margin: '8px 0 0 0', color: '#666', lineHeight: 1.4, fontSize: '0.9rem' }}>
+                  {request.address || 'No address provided'}
+                </p>
+              </div>
+
+              <div style={{
+                background: 'linear-gradient(135deg, #f0f8ff 0%, #e3f2fd 100%)',
+                padding: '15px',
+                borderRadius: 15,
+                borderLeft: '4px solid #667eea',
+                marginTop: '10px'
               }}>
                 <strong style={{ color: '#333', fontSize: '0.9rem' }}>📝 Request Details:</strong>
                 <p style={{ margin: '8px 0 0 0', color: '#666', lineHeight: 1.4, fontSize: '0.9rem' }}>
                   {request.notes || 'No additional details provided'}
                 </p>
               </div>
-              
-              <div style={{ 
-                marginTop: 15, 
-                padding: '12px 15px', 
-                background: 'rgba(0,0,0,0.05)', 
+
+              {/* Cancel Button - only show for pending or accepted requests (not cancelled, declined, completed, etc.) */}
+              {(request.status?.toLowerCase() === 'pending' || request.status?.toLowerCase() === 'accepted') && (
+                <div style={{ marginTop: 20, textAlign: 'center' }}>
+                  <button
+                    onClick={() => handleCancelRequest(request.id.toString())}
+                    disabled={cancelLoading === request.id.toString()}
+                    style={{
+                      background: cancelLoading === request.id.toString()
+                        ? '#6c757d'
+                        : 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: 25,
+                      padding: '12px 30px',
+                      fontSize: '0.9rem',
+                      fontWeight: 600,
+                      cursor: cancelLoading === request.id.toString() ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.3s ease',
+                      boxShadow: '0 4px 15px rgba(220, 53, 69, 0.3)',
+                      opacity: cancelLoading === request.id.toString() ? 0.7 : 1
+                    }}
+                    onMouseEnter={e => {
+                      if (cancelLoading !== request.id.toString()) {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(220, 53, 69, 0.4)';
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (cancelLoading !== request.id.toString()) {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 4px 15px rgba(220, 53, 69, 0.3)';
+                      }
+                    }}
+                  >
+                    {cancelLoading === request.id.toString() ? '⏳ Cancelling...' : '❌ Cancel Request'}
+                  </button>
+                </div>
+              )}
+
+              {/* Info message for non-cancellable requests */}
+              {!['pending', 'accepted'].includes(request.status?.toLowerCase()) && (
+                <div style={{
+                  marginTop: 20,
+                  textAlign: 'center',
+                  padding: '10px 15px',
+                  background: 'rgba(108, 117, 125, 0.1)',
+                  borderRadius: 12,
+                  border: '1px solid rgba(108, 117, 125, 0.2)'
+                }}>
+                  <small style={{ color: '#6c757d', fontSize: '0.85rem' }}>
+                    {request.status?.toLowerCase() === 'cancelled' && (
+                      <>
+                        {request.cancelled_by === 'provider' && '❌ This request has been cancelled by service provider'}
+                        {request.cancelled_by === 'customer' && '❌ This request has been cancelled by you'}
+                        {!request.cancelled_by && '❌ This request has been cancelled'}
+                      </>
+                    )}
+                    {request.status?.toLowerCase() === 'declined' && '❌ This request has been declined by service provider'}
+                    {request.status?.toLowerCase() === 'completed' && '✅ This service has been completed'}
+                    {request.status?.toLowerCase() === 'in_progress' && '🔄 This service is currently in progress'}
+                    {request.status?.toLowerCase() === 'confirmed' && 'ℹ️ This request is confirmed and cannot be cancelled'}
+                    {!['cancelled', 'declined', 'completed', 'in_progress', 'confirmed'].includes(request.status?.toLowerCase()) &&
+                      `ℹ️ Requests with status "${request.status}" cannot be cancelled`}
+                  </small>
+                </div>
+              )}
+
+              <div style={{
+                marginTop: 15,
+                padding: '12px 15px',
+                background: 'rgba(0,0,0,0.05)',
                 borderRadius: 12,
                 border: '1px solid rgba(0,0,0,0.1)'
               }}>
@@ -1165,13 +1314,20 @@ function RequestsSection({ user }: { user: User }) {
 
 function ServicesSection({ user }: { user: User }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [quoteModal, setQuoteModal] = useState<{ open: boolean; subcategory: string | null }>({ open: false, subcategory: null });
-  const [description, setDescription] = useState<string>("");
-  const [address, setAddress] = useState<string>("");
-  const [date, setDate] = useState<string>("");
-  const [timeRange, setTimeRange] = useState<string>("");
-  const [quoteMsg, setQuoteMsg] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [bookingModal, setBookingModal] = useState<{
+    isOpen: boolean;
+    subcategory: {
+      id: string;
+      name: string;
+      description: string;
+      price: number;
+    } | null;
+    categoryName: string;
+  }>({
+    isOpen: false,
+    subcategory: null,
+    categoryName: ""
+  });
   const [categories, setCategories] = useState<any[]>([]);
   const [subcategories, setSubcategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1269,11 +1425,11 @@ function ServicesSection({ user }: { user: User }) {
   const saveQuoteRequest = async (requestData: any) => {
     const token = localStorage.getItem("access_token");
     if (!token) {
-      setQuoteMsg("Please log in to submit requests.");
+      // setQuoteMsg("Please log in to submit requests."); // Removed - using BookingModal now
       return;
     }
 
-    setSubmitting(true);
+    // setSubmitting(true); // Removed - using BookingModal now
     try {
       // Convert date and time to datetime
       const [year, month, day] = requestData.preferred_date.split('-');
@@ -1308,26 +1464,26 @@ function ServicesSection({ user }: { user: User }) {
 
       if (response.ok) {
         const bookingData = await response.json();
-        setQuoteMsg(`✅ Quote request sent successfully! Check your requests section for updates.`);
-        setQuoteModal({ open: false, subcategory: null });
-        setDescription('');
-        setAddress('');
-        setDate('');
-        setTimeRange('');
+        // setQuoteMsg(`✅ Quote request sent successfully! Check your requests section for updates.`); // Removed - using BookingModal now
+        // setQuoteModal({ open: false, subcategory: null }); // Removed - using BookingModal now
+        // setDescription(''); // Removed - using BookingModal now
+        // setAddress(''); // Removed - using BookingModal now
+        // setDate(''); // Removed - using BookingModal now
+        // setTimeRange(''); // Removed - using BookingModal now
         
         // Show success notification
         setTimeout(() => {
-          setQuoteMsg(null);
+          // setQuoteMsg(null); // Removed - using BookingModal now
         }, 5000);
       } else {
         const errorData = await response.json();
-        setQuoteMsg(`❌ Error: ${errorData.detail || 'Failed to submit request'}`);
+        // setQuoteMsg(`❌ Error: ${errorData.detail || 'Failed to submit request'}`); // Removed - using BookingModal now
       }
     } catch (error) {
       console.error('Error submitting request:', error);
-      setQuoteMsg("Error submitting request. Please try again.");
+      // setQuoteMsg("Error submitting request. Please try again."); // Removed - using BookingModal now
     } finally {
-      setSubmitting(false);
+      // setSubmitting(false); // Removed - using BookingModal now
     }
   };
 
@@ -1371,49 +1527,7 @@ function ServicesSection({ user }: { user: User }) {
       overflow: 'hidden'
     }}>
       
-      {/* Success Notification Banner */}
-      {quoteMsg && (
-        <div style={{
-          position: 'fixed',
-          top: '20px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 2000,
-          background: quoteMsg.includes('✅') 
-            ? 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)' 
-            : 'linear-gradient(135deg, #f44336 0%, #d32f2f 100%)',
-          color: 'white',
-          padding: '15px 30px',
-          borderRadius: '50px',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
-          fontSize: '1.1rem',
-          fontWeight: 600,
-          animation: 'slideDown 0.5s ease',
-          border: '2px solid rgba(255,255,255,0.3)',
-          backdropFilter: 'blur(10px)',
-          maxWidth: '90%',
-          textAlign: 'center'
-        }}>
-          {quoteMsg}
-          <button 
-            onClick={() => setQuoteMsg(null)}
-            style={{
-              background: 'rgba(255,255,255,0.2)',
-              border: 'none',
-              color: 'white',
-              marginLeft: '15px',
-              padding: '5px 10px',
-              borderRadius: '20px',
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              fontWeight: 700
-            }}
-          >
-            ✕
-          </button>
-
-        </div>
-      )}
+      {/* Notification banner removed - BookingModal handles success messages */}
       {/* Background decoration */}
       <div style={{
         position: 'absolute',
@@ -1676,13 +1790,12 @@ function ServicesSection({ user }: { user: User }) {
                     padding: '15px 30px',
                     fontSize: '1.1rem',
                     fontWeight: 700,
-                    cursor: submitting ? 'not-allowed' : 'pointer',
+                    cursor: 'pointer',
                     width: '100%',
                     boxShadow: '0 8px 25px rgba(0,0,0,0.2)',
                     transition: 'all 0.3s ease',
-                    opacity: submitting ? 0.7 : 1
+                    opacity: 1
                   }}
-                  disabled={submitting}
                   onMouseEnter={e => {
                     if (!e.currentTarget.disabled) {
                       e.currentTarget.style.transform = 'translateY(-2px)';
@@ -1694,10 +1807,19 @@ function ServicesSection({ user }: { user: User }) {
                     e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.2)';
                   }}
                   onClick={() => {
-                    setQuoteModal({ open: true, subcategory: sub.id });
+                    setBookingModal({
+                      isOpen: true,
+                      subcategory: {
+                        id: sub.id.toString(),
+                        name: sub.name,
+                        description: sub.description,
+                        price: parseFloat(sub.priceRange.replace('$', '')) || 0
+                      },
+                      categoryName: selectedCategory || ""
+                    });
                   }}
                 >
-                  {submitting ? '🔄 Submitting...' : '📝 Request Quote'}
+                  📝 Book Service
                 </button>
               </div>
             ))}
@@ -1705,8 +1827,18 @@ function ServicesSection({ user }: { user: User }) {
         </div>
       )}
 
-      {/* Enhanced Modal for Request Quote */}
-      {quoteModal.open && (
+      {/* Booking Modal */}
+      {bookingModal.isOpen && bookingModal.subcategory && (
+        <BookingModal
+          isOpen={bookingModal.isOpen}
+          onClose={() => setBookingModal({ isOpen: false, subcategory: null, categoryName: "" })}
+          subcategory={bookingModal.subcategory}
+          categoryName={bookingModal.categoryName}
+        />
+      )}
+
+      {/* Old quote modal removed - replaced with BookingModal */}
+      {false && (
         <div style={{
           position: 'fixed',
           top: 0,

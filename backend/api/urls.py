@@ -16,11 +16,16 @@ from .services import (
 )
 from .bookings import (
     create_booking, get_user_bookings, get_provider_bookings, get_provider_requests,
-    update_booking_status, accept_booking_request, decline_booking_request, complete_booking
+    update_booking_status, accept_booking_request, decline_booking_request, complete_booking,
+    cancel_booking_request
 )
 from .analytics import (
     get_customer_dashboard_stats, get_provider_dashboard_stats,
     get_provider_earnings, get_platform_analytics
+)
+from .marketplace import (
+    register_service_with_price, get_available_providers, create_provider_specific_booking,
+    rate_provider, get_provider_profile, update_service_availability
 )
 
 urlpatterns = [
@@ -50,10 +55,19 @@ urlpatterns = [
     path('bookings/<int:booking_id>/accept/', accept_booking_request, name='api_accept_booking'),
     path('bookings/<int:booking_id>/decline/', decline_booking_request, name='api_decline_booking'),
     path('bookings/<int:booking_id>/complete/', complete_booking, name='api_complete_booking'),
+    path('bookings/<int:booking_id>/cancel/', cancel_booking_request, name='api_cancel_booking'),
 
     # Analytics API endpoints
     path('analytics/customer/dashboard/', get_customer_dashboard_stats, name='api_customer_dashboard_stats'),
     path('analytics/provider/dashboard/', get_provider_dashboard_stats, name='api_provider_dashboard_stats'),
     path('analytics/provider/earnings/', get_provider_earnings, name='api_provider_earnings'),
     path('analytics/platform/', get_platform_analytics, name='api_platform_analytics'),
+
+    # Marketplace API endpoints
+    path('marketplace/register-service/', register_service_with_price, name='api_register_service_with_price'),
+    path('marketplace/service/<int:service_id>/providers/', get_available_providers, name='api_get_available_providers'),
+    path('marketplace/book-provider/', create_provider_specific_booking, name='api_create_provider_specific_booking'),
+    path('marketplace/rate-provider/', rate_provider, name='api_rate_provider'),
+    path('marketplace/provider/<int:provider_id>/profile/', get_provider_profile, name='api_get_provider_profile'),
+    path('marketplace/service-registration/<int:service_registration_id>/', update_service_availability, name='api_update_service_availability'),
 ]

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ServiceCategory, ServiceSubcategory, Booking, UserRegisteredService
+from .models import ServiceCategory, ServiceSubcategory, Booking, UserRegisteredService, ProviderRating
 
 # Customize admin site headers
 admin.site.site_header = "Home Services Platform Administration"
@@ -52,10 +52,20 @@ class BookingAdmin(admin.ModelAdmin):
 
 @admin.register(UserRegisteredService)
 class UserRegisteredServiceAdmin(admin.ModelAdmin):
-    list_display = ('user', 'service', 'registered_at')
-    list_filter = ('service__category', 'registered_at')
-    search_fields = ('user__username', 'service__name')
+    list_display = ('user', 'service', 'provider_price', 'is_available', 'registered_at')
+    list_filter = ('service__category', 'is_available', 'registered_at')
+    search_fields = ('user__username', 'service__name', 'description')
     ordering = ('-registered_at',)
 
     # Show user and service details
     autocomplete_fields = ['user', 'service']
+
+@admin.register(ProviderRating)
+class ProviderRatingAdmin(admin.ModelAdmin):
+    list_display = ('provider', 'customer', 'rating', 'booking', 'created_at')
+    list_filter = ('rating', 'created_at')
+    search_fields = ('provider__username', 'customer__username', 'review')
+    ordering = ('-created_at',)
+
+    # Show related details
+    autocomplete_fields = ['provider', 'customer', 'booking']

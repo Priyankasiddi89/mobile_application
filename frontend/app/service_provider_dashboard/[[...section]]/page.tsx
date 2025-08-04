@@ -672,6 +672,7 @@ function IncomingRequests({ user }: { user: User }) {
   }, []);
 
   const handleAccept = async (bookingId: string) => {
+    console.log(`Attempting to accept booking ID: ${bookingId}`);
     setActionLoading(bookingId);
     const token = localStorage.getItem("access_token");
 
@@ -684,15 +685,27 @@ function IncomingRequests({ user }: { user: User }) {
         },
       });
 
+      console.log(`Accept response status: ${response.status}`);
+
       if (response.ok) {
-        alert('Request accepted successfully!');
+        const data = await response.json();
+        console.log('Accept response data:', data);
+        alert('✅ Request accepted successfully!');
         fetchRequests(); // Refresh the list
       } else {
-        const error = await response.json();
-        alert(error.detail || 'Failed to accept request');
+        const errorText = await response.text();
+        console.error('Accept failed:', errorText);
+
+        try {
+          const error = JSON.parse(errorText);
+          alert(`❌ Failed to accept request: ${error.error || error.detail || 'Unknown error'}`);
+        } catch {
+          alert(`❌ Failed to accept request: ${errorText || 'Unknown error'}`);
+        }
       }
     } catch (error) {
-      alert('Network error. Please try again.');
+      console.error('Network error:', error);
+      alert('❌ Network error. Please try again.');
     } finally {
       setActionLoading(null);
     }
@@ -778,9 +791,16 @@ function IncomingRequests({ user }: { user: User }) {
                   </div>
                 </div>
 
+                {request.address && (
+                  <div style={{ marginBottom: '16px', padding: '12px', background: 'white', borderRadius: 8, border: '1px solid #e9ecef' }}>
+                    <strong style={{ color: '#495057' }}>📍 Service Address:</strong>
+                    <p style={{ margin: '4px 0 0 0', color: '#6c757d' }}>{request.address}</p>
+                  </div>
+                )}
+
                 {request.notes && (
                   <div style={{ marginBottom: '16px', padding: '12px', background: 'white', borderRadius: 8, border: '1px solid #e9ecef' }}>
-                    <strong style={{ color: '#495057' }}>Notes:</strong>
+                    <strong style={{ color: '#495057' }}>📝 Notes:</strong>
                     <p style={{ margin: '4px 0 0 0', color: '#6c757d' }}>{request.notes}</p>
                   </div>
                 )}
@@ -828,6 +848,144 @@ function IncomingRequests({ user }: { user: User }) {
   );
 }
 
+function EditServiceForm({ service, onUpdate, onCancel, loading }: {
+  service: any;
+  onUpdate: (data: any) => void;
+  onCancel: () => void;
+  loading: boolean;
+}) {
+  const [providerPrice, setProviderPrice] = useState(service.provider_price?.toString() || service.price?.toString() || '');
+  const [description, setDescription] = useState(service.provider_description || '');
+  const [isAvailable, setIsAvailable] = useState(service.is_available !== undefined ? service.is_available : true);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!providerPrice || isNaN(Number(providerPrice))) {
+      alert('Please enter a valid price');
+      return;
+    }
+
+    if (Number(providerPrice) <= 0) {
+      alert('Price must be greater than 0');
+      return;
+    }
+
+    if (!description.trim()) {
+      alert('Please provide a service description');
+      return;
+    }
+
+    onUpdate({
+      provider_price: Number(providerPrice),
+      description: description.trim(),
+      is_available: isAvailable
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div style={{ marginBottom: '20px' }}>
+        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#2c3e50' }}>
+          Your Price (₹)
+        </label>
+        <input
+          type="number"
+          value={providerPrice}
+          onChange={(e) => setProviderPrice(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '12px',
+            borderRadius: 8,
+            border: '1px solid #e9ecef',
+            fontSize: '16px'
+          }}
+          placeholder="Enter your price"
+          min="1"
+          step="0.01"
+          required
+        />
+        {service.base_price && (
+          <div style={{ fontSize: '12px', color: '#6c757d', marginTop: '4px' }}>
+            Base price: ₹{service.base_price}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginBottom: '20px' }}>
+        <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#2c3e50' }}>
+          Service Description
+        </label>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '12px',
+            borderRadius: 8,
+            border: '1px solid #e9ecef',
+            fontSize: '14px',
+            minHeight: '80px',
+            resize: 'vertical'
+          }}
+          placeholder="Describe your service offering..."
+          required
+        />
+      </div>
+
+      <div style={{ marginBottom: '24px' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={isAvailable}
+            onChange={(e) => setIsAvailable(e.target.checked)}
+            style={{ transform: 'scale(1.2)' }}
+          />
+          <span style={{ fontWeight: 600, color: '#2c3e50' }}>
+            Currently accepting bookings for this service
+          </span>
+        </label>
+      </div>
+
+      <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+        <button
+          type="button"
+          onClick={onCancel}
+          style={{
+            padding: '12px 24px',
+            borderRadius: 8,
+            background: '#6c757d',
+            color: 'white',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 600
+          }}
+          disabled={loading}
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          style={{
+            padding: '12px 24px',
+            borderRadius: 8,
+            background: loading ? '#6c757d' : 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+            color: 'white',
+            border: 'none',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            fontSize: '14px',
+            fontWeight: 600
+          }}
+          disabled={loading}
+        >
+          {loading ? '⏳ Updating...' : '✅ Update Service'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function ServicesSection({ user }: { user: User }) {
   const [registeredServices, setRegisteredServices] = useState<any[]>([]);
   const [availableServices, setAvailableServices] = useState<any[]>([]);
@@ -837,6 +995,8 @@ function ServicesSection({ user }: { user: User }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [categories, setCategories] = useState<any[]>([]);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingService, setEditingService] = useState<any>(null);
 
   const fetchServices = () => {
     const token = localStorage.getItem("access_token");
@@ -903,28 +1063,69 @@ function ServicesSection({ user }: { user: User }) {
   }, []);
 
   const handleRegisterService = async (serviceId: string, serviceName: string) => {
-    setActionLoading(serviceId);
     const token = localStorage.getItem("access_token");
+    if (!token) return;
+
+    // Get the base price for the service to suggest a provider price
+    const selectedService = availableServices?.find(s => s.id.toString() === serviceId);
+    const basePrice = selectedService?.price || 0;
+    const suggestedPrice = basePrice + 50; // Suggest base price + ₹50
+
+    // Prompt for custom pricing
+    const priceInput = prompt(
+      `Set your price for "${serviceName}"\n\nBase price: ₹${basePrice}\nSuggested price: ₹${suggestedPrice}\n\nEnter your price:`,
+      suggestedPrice.toString()
+    );
+
+    if (!priceInput || isNaN(Number(priceInput))) {
+      alert('Please enter a valid price');
+      return;
+    }
+
+    const providerPrice = Number(priceInput);
+    if (providerPrice <= 0) {
+      alert('Price must be greater than 0');
+      return;
+    }
+
+    // Prompt for service description
+    const description = prompt(
+      `Add a description for your "${serviceName}" service:\n\n(This helps customers choose you)`,
+      `Professional ${serviceName.toLowerCase()} service with quality guarantee`
+    );
+
+    if (!description || description.trim() === '') {
+      alert('Please provide a service description');
+      return;
+    }
+
+    setActionLoading(serviceId);
 
     try {
-      const response = await fetch("http://localhost:8000/api/services/provider/register/", {
+      const response = await fetch("http://localhost:8000/api/marketplace/register-service/", {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ service_id: serviceId })
+        body: JSON.stringify({
+          service_id: parseInt(serviceId),
+          provider_price: providerPrice,
+          description: description.trim(),
+          is_available: true
+        })
       });
 
       if (response.ok) {
-        // Show success message with service name
-        const successMessage = `✅ Successfully registered for "${serviceName}"! You will now receive booking requests for this service.`;
+        const data = await response.json();
+        // Show success message with pricing info
+        const successMessage = `✅ Successfully registered for "${serviceName}"!\n\n💰 Your price: ₹${providerPrice}\n📋 Base price: ₹${basePrice}\n\nYou will now receive direct booking requests for this service.`;
         alert(successMessage);
         fetchServices();
         setShowAddModal(false);
       } else {
         const error = await response.json();
-        alert(error.detail || 'Failed to register for service');
+        alert(error.error || 'Failed to register for service');
       }
     } catch (error) {
       alert('Network error. Please try again.');
@@ -958,6 +1159,52 @@ function ServicesSection({ user }: { user: User }) {
       } else {
         const error = await response.json();
         alert(error.detail || 'Failed to unregister from service');
+      }
+    } catch (error) {
+      alert('Network error. Please try again.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleEditService = (service: any) => {
+    setEditingService(service);
+    setShowEditModal(true);
+  };
+
+  const handleUpdateService = async (updatedData: any) => {
+    const token = localStorage.getItem("access_token");
+    if (!token || !editingService) return;
+
+    setActionLoading(editingService.id);
+
+    try {
+      // Use the registration_id for the API call
+      const registrationId = editingService.registration_id;
+
+      if (!registrationId) {
+        alert('Registration ID not found. Please refresh and try again.');
+        return;
+      }
+
+      const response = await fetch(`http://localhost:8000/api/marketplace/service-registration/${registrationId}/`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updatedData)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert(`✅ Service updated successfully!\n\n💰 New price: ₹${data.service.provider_price}\n📋 Available: ${data.service.is_available ? 'Yes' : 'No'}`);
+        fetchServices();
+        setShowEditModal(false);
+        setEditingService(null);
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Failed to update service');
       }
     } catch (error) {
       alert('Network error. Please try again.');
@@ -1122,53 +1369,120 @@ function ServicesSection({ user }: { user: User }) {
                           </div>
                         </div>
                       </div>
-                      <p style={{ margin: '0 0 16px 0', color: '#6c757d', fontSize: '14px', lineHeight: 1.6 }}>
+                      <p style={{ margin: '0 0 12px 0', color: '#6c757d', fontSize: '14px', lineHeight: 1.6 }}>
                         {service.description}
                       </p>
-                      <div style={{
-                        background: '#e8f5e8',
-                        padding: '12px 16px',
-                        borderRadius: 10,
-                        display: 'inline-block',
-                        border: '1px solid #d4edda'
-                      }}>
-                        <span style={{ fontSize: '18px', fontWeight: 700, color: '#28a745' }}>
-                          ${service.price}
-                        </span>
-                        <span style={{ fontSize: '12px', color: '#6c757d', marginLeft: '6px' }}>per service</span>
+                      {service.provider_description && (
+                        <div style={{
+                          background: '#f8f9fa',
+                          padding: '12px',
+                          borderRadius: 8,
+                          marginBottom: '16px',
+                          border: '1px solid #e9ecef'
+                        }}>
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: '#6c757d', marginBottom: '4px' }}>
+                            Your Service Description:
+                          </div>
+                          <div style={{ fontSize: '14px', color: '#495057' }}>
+                            {service.provider_description}
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{
+                          background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                          padding: '12px 16px',
+                          borderRadius: 10,
+                          color: 'white'
+                        }}>
+                          <div style={{ fontSize: '12px', opacity: 0.9 }}>Your Price</div>
+                          <span style={{ fontSize: '18px', fontWeight: 700 }}>
+                            ₹{service.provider_price || service.price}
+                          </span>
+                        </div>
+                        {service.provider_price && service.base_price && service.provider_price !== service.base_price && (
+                          <div style={{
+                            background: '#f8f9fa',
+                            padding: '12px 16px',
+                            borderRadius: 10,
+                            border: '1px solid #e9ecef'
+                          }}>
+                            <div style={{ fontSize: '12px', color: '#6c757d' }}>Base Price</div>
+                            <span style={{ fontSize: '16px', fontWeight: 600, color: '#6c757d' }}>
+                              ₹{service.base_price}
+                            </span>
+                          </div>
+                        )}
+                        {service.is_available !== undefined && (
+                          <div style={{
+                            background: service.is_available ? '#d4edda' : '#f8d7da',
+                            color: service.is_available ? '#155724' : '#721c24',
+                            padding: '8px 12px',
+                            borderRadius: 20,
+                            fontSize: '12px',
+                            fontWeight: 600
+                          }}>
+                            {service.is_available ? '✅ Available' : '❌ Unavailable'}
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <button
-                      style={{
-                        padding: '12px 20px',
-                        borderRadius: 10,
-                        background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
-                        color: 'white',
-                        border: 'none',
-                        cursor: actionLoading === service.id ? 'not-allowed' : 'pointer',
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        opacity: actionLoading === service.id ? 0.6 : 1,
-                        transition: 'all 0.3s ease',
-                        marginLeft: '24px'
-                      }}
-                      onClick={() => handleUnregisterService(service.id, service.name)}
-                      disabled={actionLoading === service.id}
-                      onMouseEnter={e => {
-                        if (actionLoading !== service.id) {
+                    <div style={{ display: 'flex', gap: '12px', marginLeft: '24px' }}>
+                      <button
+                        style={{
+                          padding: '12px 20px',
+                          borderRadius: 10,
+                          background: 'linear-gradient(135deg, #007bff 0%, #0056b3 100%)',
+                          color: 'white',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          transition: 'all 0.3s ease'
+                        }}
+                        onClick={() => handleEditService(service)}
+                        onMouseEnter={e => {
                           e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = '0 6px 15px rgba(220, 53, 69, 0.4)';
-                        }
-                      }}
-                      onMouseLeave={e => {
-                        if (actionLoading !== service.id) {
+                          e.currentTarget.style.boxShadow = '0 6px 15px rgba(0, 123, 255, 0.4)';
+                        }}
+                        onMouseLeave={e => {
                           e.currentTarget.style.transform = 'translateY(0)';
                           e.currentTarget.style.boxShadow = 'none';
-                        }
-                      }}
-                    >
-                      {actionLoading === service.id ? '⏳ Removing...' : '🗑️ Remove'}
-                    </button>
+                        }}
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        style={{
+                          padding: '12px 20px',
+                          borderRadius: 10,
+                          background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                          color: 'white',
+                          border: 'none',
+                          cursor: actionLoading === service.id ? 'not-allowed' : 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          opacity: actionLoading === service.id ? 0.6 : 1,
+                          transition: 'all 0.3s ease'
+                        }}
+                        onClick={() => handleUnregisterService(service.id, service.name)}
+                        disabled={actionLoading === service.id}
+                        onMouseEnter={e => {
+                          if (actionLoading !== service.id) {
+                            e.currentTarget.style.transform = 'translateY(-2px)';
+                            e.currentTarget.style.boxShadow = '0 6px 15px rgba(220, 53, 69, 0.4)';
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          if (actionLoading !== service.id) {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = 'none';
+                          }
+                        }}
+                      >
+                        {actionLoading === service.id ? '⏳ Removing...' : '🗑️ Remove'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1710,6 +2024,95 @@ function ServicesSection({ user }: { user: User }) {
           </div>
         </div>
       )}
+
+      {/* Edit Service Modal */}
+      {showEditModal && editingService && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          backdropFilter: 'blur(5px)'
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: 20,
+            padding: '32px',
+            maxWidth: '500px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflow: 'auto',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <h3 style={{ margin: 0, color: '#2c3e50', fontSize: '1.5rem', fontWeight: 700 }}>
+                ✏️ Edit Service
+              </h3>
+              <button
+                style={{
+                  background: 'rgba(255,255,255,0.2)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: 40,
+                  height: 40,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  fontSize: '18px',
+                  color: '#6c757d',
+                  transition: 'all 0.3s ease'
+                }}
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingService(null);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{
+              background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+              padding: '16px',
+              borderRadius: 12,
+              marginBottom: '24px',
+              border: '1px solid #e9ecef'
+            }}>
+              <h4 style={{ margin: '0 0 8px 0', color: '#2c3e50', fontSize: '1.1rem' }}>
+                {editingService.name}
+              </h4>
+              <div style={{
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                padding: '4px 12px',
+                borderRadius: 15,
+                fontSize: '12px',
+                fontWeight: 600,
+                display: 'inline-block'
+              }}>
+                {editingService.category?.name}
+              </div>
+            </div>
+
+            <EditServiceForm
+              service={editingService}
+              onUpdate={handleUpdateService}
+              onCancel={() => {
+                setShowEditModal(false);
+                setEditingService(null);
+              }}
+              loading={actionLoading === editingService.id}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1746,6 +2149,38 @@ function ActiveBookings({ user }: { user: User }) {
   useEffect(() => {
     fetchBookings();
   }, []);
+
+  const handleCancelBooking = async (bookingId: string) => {
+    const confirmCancel = window.confirm("Are you sure you want to cancel this booking? This action cannot be undone.");
+
+    if (!confirmCancel) return;
+
+    setActionLoading(bookingId);
+    const token = localStorage.getItem("access_token");
+
+    try {
+      const response = await fetch(`http://localhost:8000/api/bookings/${bookingId}/cancel/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        alert("✅ Booking cancelled successfully!");
+        fetchBookings(); // Refresh the list
+      } else {
+        const errorData = await response.json();
+        alert(`❌ Failed to cancel booking: ${errorData.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error cancelling booking:', error);
+      alert("❌ Network error. Please try again.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   const updateBookingStatus = async (bookingId: string, newStatus: string) => {
     setActionLoading(bookingId);
@@ -1866,9 +2301,16 @@ function ActiveBookings({ user }: { user: User }) {
                   </div>
                 </div>
 
+                {booking.address && (
+                  <div style={{ marginBottom: '16px', padding: '12px', background: 'white', borderRadius: 8, border: '1px solid #e9ecef' }}>
+                    <strong style={{ color: '#495057' }}>📍 Service Address:</strong>
+                    <p style={{ margin: '4px 0 0 0', color: '#6c757d' }}>{booking.address}</p>
+                  </div>
+                )}
+
                 {booking.notes && (
                   <div style={{ marginBottom: '16px', padding: '12px', background: 'white', borderRadius: 8, border: '1px solid #e9ecef' }}>
-                    <strong style={{ color: '#495057' }}>Notes:</strong>
+                    <strong style={{ color: '#495057' }}>📝 Notes:</strong>
                     <p style={{ margin: '4px 0 0 0', color: '#6c757d' }}>{booking.notes}</p>
                   </div>
                 )}
@@ -1928,17 +2370,31 @@ function ActiveBookings({ user }: { user: User }) {
                     style={{
                       padding: '10px 20px',
                       borderRadius: 6,
-                      background: '#dc3545',
+                      background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
                       color: 'white',
                       border: 'none',
                       cursor: actionLoading === booking.id ? 'not-allowed' : 'pointer',
                       fontSize: '14px',
-                      opacity: actionLoading === booking.id ? 0.6 : 1
+                      fontWeight: 600,
+                      opacity: actionLoading === booking.id ? 0.6 : 1,
+                      transition: 'all 0.3s ease'
                     }}
-                    onClick={() => updateBookingStatus(booking.id, 'cancelled')}
+                    onClick={() => handleCancelBooking(booking.id)}
                     disabled={actionLoading === booking.id}
+                    onMouseEnter={e => {
+                      if (actionLoading !== booking.id) {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 6px 15px rgba(220, 53, 69, 0.4)';
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (actionLoading !== booking.id) {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }
+                    }}
                   >
-                    {actionLoading === booking.id ? 'Processing...' : 'Cancel'}
+                    {actionLoading === booking.id ? '⏳ Cancelling...' : '❌ Cancel Booking'}
                   </button>
                 </div>
               </div>
@@ -2222,9 +2678,16 @@ function PreviousBookings({ user }: { user: User }) {
                   </div>
                 </div>
 
+                {booking.address && (
+                  <div style={{ marginBottom: '12px', padding: '12px', background: 'white', borderRadius: 8, border: '1px solid #e9ecef' }}>
+                    <strong style={{ color: '#495057' }}>📍 Service Address:</strong>
+                    <p style={{ margin: '4px 0 0 0', color: '#6c757d' }}>{booking.address}</p>
+                  </div>
+                )}
+
                 {booking.notes && (
                   <div style={{ padding: '12px', background: 'white', borderRadius: 8, border: '1px solid #e9ecef' }}>
-                    <strong style={{ color: '#495057' }}>Notes:</strong>
+                    <strong style={{ color: '#495057' }}>📝 Notes:</strong>
                     <p style={{ margin: '4px 0 0 0', color: '#6c757d' }}>{booking.notes}</p>
                   </div>
                 )}

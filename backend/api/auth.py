@@ -95,15 +95,11 @@ def login_user(request):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        # Generate JWT token
-        payload = {
-            'user_id': str(user.id),
-            'user_type': user.user_type,
-            'role': user.role,
-            'exp': datetime.utcnow() + timedelta(minutes=60),
-            'token_type': 'access'
-        }
-        access_token = jwt.encode(payload, settings.SECRET_KEY, algorithm='HS256')
+        # Generate JWT token using SimpleJWT
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
 
         return Response({
             'access': access_token,

@@ -35,6 +35,8 @@ class BookingSerializer(serializers.Serializer):
     payment_status = serializers.CharField()
     payment_method = serializers.CharField(required=False)
     notes = serializers.CharField(required=False, allow_blank=True)
+    address = serializers.CharField(required=False, allow_blank=True)
+    cancelled_by = serializers.CharField(required=False, allow_blank=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
 

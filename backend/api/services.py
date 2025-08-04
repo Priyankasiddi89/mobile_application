@@ -83,10 +83,29 @@ def get_provider_registered_services(request):
                 status=status.HTTP_403_FORBIDDEN
             )
         
-        registered_relations = UserRegisteredService.objects.filter(user=request.user).select_related('service')
-        services = [relation.service for relation in registered_relations]
-        serializer = ServiceSubcategorySerializer(services, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        registered_relations = UserRegisteredService.objects.filter(user=request.user).select_related('service', 'service__category')
+
+        services_data = []
+        for relation in registered_relations:
+            service = relation.service
+            services_data.append({
+                'id': service.id,
+                'registration_id': relation.id,  # Add the UserRegisteredService ID for editing
+                'name': service.name,
+                'description': service.description,
+                'base_price': float(service.price),
+                'provider_price': float(relation.provider_price),
+                'provider_description': relation.description,
+                'is_available': relation.is_available,
+                'category': {
+                    'id': service.category.id,
+                    'name': service.category.name,
+                    'icon': service.category.icon
+                },
+                'registered_at': relation.registered_at.isoformat()
+            })
+
+        return Response(services_data, status=status.HTTP_200_OK)
         
     except Exception as e:
         return Response(

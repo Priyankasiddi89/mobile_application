@@ -182,6 +182,17 @@ http://localhost:8000/api/
 | GET | `/api/analytics/provider/earnings/` | Detailed earnings with monthly/weekly breakdown | ✅ |
 | GET | `/api/analytics/platform/` | Platform analytics (admin only) | ✅ |
 
+### **🏪 Marketplace API (`/api/marketplace/`)**
+
+| Method | Endpoint | Description | Auth Required |
+|--------|----------|-------------|---------------|
+| POST | `/api/marketplace/register-service/` | Provider registers service with custom pricing | ✅ |
+| GET | `/api/marketplace/service/{id}/providers/` | Get available providers for a service with pricing & ratings | ✅ |
+| POST | `/api/marketplace/book-provider/` | Create booking for specific provider | ✅ |
+| POST | `/api/marketplace/rate-provider/` | Rate provider after service completion | ✅ |
+| GET | `/api/marketplace/provider/{id}/profile/` | Get provider profile with ratings and services | ✅ |
+| PUT | `/api/marketplace/service-registration/{id}/` | Update provider's service pricing and availability | ✅ |
+
 ### **🔄 API Features**
 
 - **Smart Filtering**: Bookings API supports status filtering (`?status=active`, `?status=completed`)
@@ -253,6 +264,50 @@ curl http://localhost:8000/api/services/categories/
 ```bash
 curl -H "Authorization: Bearer <access_token>" \
   http://localhost:8000/api/analytics/provider/earnings/
+```
+
+#### Register Service with Custom Price (Provider)
+```bash
+curl -X POST http://localhost:8000/api/marketplace/register-service/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <provider_token>" \
+  -d '{
+    "service_id": 1,
+    "provider_price": 750.00,
+    "description": "Professional cleaning with eco-friendly products",
+    "is_available": true
+  }'
+```
+
+#### Get Available Providers for Service (Customer)
+```bash
+curl -H "Authorization: Bearer <customer_token>" \
+  http://localhost:8000/api/marketplace/service/1/providers/
+```
+
+#### Book Specific Provider (Customer)
+```bash
+curl -X POST http://localhost:8000/api/marketplace/book-provider/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <customer_token>" \
+  -d '{
+    "provider_id": 2,
+    "service_id": 1,
+    "service_date": "2024-01-15T10:00:00Z",
+    "notes": "Need deep cleaning for 3-bedroom apartment"
+  }'
+```
+
+#### Rate Provider (Customer)
+```bash
+curl -X POST http://localhost:8000/api/marketplace/rate-provider/ \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <customer_token>" \
+  -d '{
+    "booking_id": 1,
+    "rating": 5,
+    "review": "Excellent service, very professional!"
+  }'
 ```
 
 ---

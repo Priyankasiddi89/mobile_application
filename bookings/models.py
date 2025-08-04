@@ -38,6 +38,7 @@ class Booking(models.Model):
         ('confirmed', 'Confirmed'),
         ('completed', 'Completed'),
         ('cancelled', 'Cancelled'),
+        ('declined', 'Declined'),
     ]
 
     PAYMENT_STATUS_CHOICES = [
@@ -61,7 +62,12 @@ class Booking(models.Model):
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='unpaid')
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, default='online')
     notes = models.TextField(max_length=500, blank=True)
+    address = models.TextField(max_length=500, blank=True, help_text="Service address where the work will be performed")
     declined_by = models.TextField(blank=True)  # JSON string of provider usernames who declined
+    cancelled_by = models.CharField(max_length=20, blank=True, null=True, choices=[
+        ('customer', 'Customer'),
+        ('provider', 'Service Provider'),
+    ])  # Track who cancelled the booking
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -92,10 +98,13 @@ class Booking(models.Model):
             self.save()
 
 
-# Many-to-Many relationship for User registered services
+# Many-to-Many relationship for User registered services with provider-specific pricing
 class UserRegisteredService(models.Model):
     user = models.ForeignKey('authentication.User', on_delete=models.CASCADE, related_name='user_services')
     service = models.ForeignKey(ServiceSubcategory, on_delete=models.CASCADE, related_name='registered_users')
+    provider_price = models.DecimalField(max_digits=10, decimal_places=2, help_text="Provider's custom price for this service")
+    is_available = models.BooleanField(default=True, help_text="Whether provider is currently accepting bookings for this service")
+    description = models.TextField(blank=True, help_text="Provider's description of their service offering")
     registered_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -103,4 +112,38 @@ class UserRegisteredService(models.Model):
         unique_together = ['user', 'service']
 
     def __str__(self):
-        return f"{self.user.username} - {self.service.name}"
+        return f"{self.user.username} - {self.service.name} (₹{self.provider_price})"
+
+
+# Provider Rating System
+class ProviderRating(models.Model):
+    provider = models.ForeignKey('authentication.User', on_delete=models.CASCADE, related_name='received_ratings')
+    customer = models.ForeignKey('authentication.User', on_delete=models.CASCADE, related_name='given_ratings')
+    booking = models.OneToOneField('Booking', on_delete=models.CASCADE, related_name='rating')
+    rating = models.IntegerField(choices=[(i, i) for i in range(1, 6)], help_text="Rating from 1 to 5 stars")
+    review = models.TextField(blank=True, help_text="Customer's review of the service")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'provider_ratings'
+        unique_together = ['provider', 'customer', 'booking']
+
+    def __str__(self):
+        return f"{self.customer.username} rated {self.provider.username}: {self.rating}/5"
+
+
+# Provider Rating System
+class ProviderRating(models.Model):
+    provider = models.ForeignKey('authentication.User', on_delete=models.CASCADE, related_name='received_ratings')
+    customer = models.ForeignKey('authentication.User', on_delete=models.CASCADE, related_name='given_ratings')
+    booking = models.OneToOneField('Booking', on_delete=models.CASCADE, related_name='rating')
+    rating = models.IntegerField(choices=[(i, i) for i in range(1, 6)], help_text="Rating from 1 to 5 stars")
+    review = models.TextField(blank=True, help_text="Customer's review of the service")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'provider_ratings'
+        unique_together = ['provider', 'customer', 'booking']
+
+    def __str__(self):
+        return f"{self.customer.username} rated {self.provider.username}: {self.rating}/5"
