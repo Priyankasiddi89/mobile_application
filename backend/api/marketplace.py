@@ -114,12 +114,14 @@ def get_available_providers(request, service_id):
             provider = provider_service.user
             
             # Calculate provider's average rating
-            avg_rating = ProviderRating.objects.filter(
-                provider=provider
-            ).aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0
-            
-            # Count total reviews
-            total_reviews = ProviderRating.objects.filter(provider=provider).count()
+            provider_ratings = ProviderRating.objects.filter(provider=provider)
+            avg_rating = provider_ratings.aggregate(avg_rating=Avg('rating'))['avg_rating'] or 0
+
+            # Count total ratings and reviews with text
+            total_ratings = provider_ratings.count()
+            total_reviews = provider_ratings.filter(
+                review__isnull=False
+            ).exclude(review='').exclude(review__exact='').count()
             
             # Count completed bookings
             completed_bookings = Booking.objects.filter(
@@ -136,6 +138,7 @@ def get_available_providers(request, service_id):
                 'price_difference': float(provider_service.provider_price - service.price),
                 'description': provider_service.description,
                 'rating': round(avg_rating, 1),
+                'total_ratings': total_ratings,
                 'total_reviews': total_reviews,
                 'completed_bookings': completed_bookings,
                 'registered_at': provider_service.registered_at.isoformat()

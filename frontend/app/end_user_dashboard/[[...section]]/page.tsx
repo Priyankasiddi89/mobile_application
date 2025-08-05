@@ -819,6 +819,11 @@ function RequestsSection({ user }: { user: User }) {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancelLoading, setCancelLoading] = useState<string | null>(null);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [selectedRequest, setSelectedRequest] = useState<any>(null);
+  const [rating, setRating] = useState(0);
+  const [review, setReview] = useState('');
+  const [ratingLoading, setRatingLoading] = useState(false);
 
   useEffect(() => {
     const fetchRequests = async () => {
@@ -922,6 +927,73 @@ function RequestsSection({ user }: { user: User }) {
       alert("❌ Network error. Please try again.");
     } finally {
       setCancelLoading(null);
+    }
+  };
+
+  const openRatingModal = (request: any) => {
+    setSelectedRequest(request);
+    setShowRatingModal(true);
+    setRating(0);
+    setReview('');
+  };
+
+  const closeRatingModal = () => {
+    setShowRatingModal(false);
+    setSelectedRequest(null);
+    setRating(0);
+    setReview('');
+  };
+
+  const submitRating = async () => {
+    if (!selectedRequest || rating === 0) {
+      alert('Please select a rating');
+      return;
+    }
+
+    setRatingLoading(true);
+
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        alert("Please log in to rate the service.");
+        return;
+      }
+
+      const response = await fetch("http://localhost:8000/api/bookings/rate-provider/", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          booking_id: selectedRequest.id,
+          rating: rating,
+          review: review
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert("✅ Thank you for your rating!");
+
+        // Update the request to show it has been rated
+        const updatedRequests = requests.map(req =>
+          req.id === selectedRequest.id
+            ? { ...req, rating: rating }
+            : req
+        );
+        setRequests(updatedRequests);
+
+        closeRatingModal();
+      } else {
+        const errorData = await response.json();
+        alert(`❌ Failed to submit rating: ${errorData.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+      alert("❌ Network error. Please try again.");
+    } finally {
+      setRatingLoading(false);
     }
   };
 
@@ -1282,7 +1354,36 @@ function RequestsSection({ user }: { user: User }) {
                       </>
                     )}
                     {request.status?.toLowerCase() === 'declined' && '❌ This request has been declined by service provider'}
-                    {request.status?.toLowerCase() === 'completed' && '✅ This service has been completed'}
+                    {request.status?.toLowerCase() === 'completed' && (
+                      <div>
+                        <span>✅ This service has been completed</span>
+                        {!request.rating && (
+                          <div style={{ marginTop: '10px' }}>
+                            <button
+                              onClick={() => openRatingModal(request)}
+                              style={{
+                                background: 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '20px',
+                                padding: '8px 16px',
+                                fontSize: '0.8rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                transition: 'all 0.3s ease'
+                              }}
+                            >
+                              ⭐ Rate Service
+                            </button>
+                          </div>
+                        )}
+                        {request.rating && (
+                          <div style={{ marginTop: '10px', fontSize: '0.8rem', color: '#4CAF50' }}>
+                            ⭐ You rated this service: {request.rating}/5 stars
+                          </div>
+                        )}
+                      </div>
+                    )}
                     {request.status?.toLowerCase() === 'in_progress' && '🔄 This service is currently in progress'}
                     {request.status?.toLowerCase() === 'confirmed' && 'ℹ️ This request is confirmed and cannot be cancelled'}
                     {!['cancelled', 'declined', 'completed', 'in_progress', 'confirmed'].includes(request.status?.toLowerCase()) &&
@@ -1306,6 +1407,134 @@ function RequestsSection({ user }: { user: User }) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Rating Modal */}
+      {showRatingModal && selectedRequest && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '20px',
+            padding: '30px',
+            maxWidth: '500px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflow: 'auto'
+          }}>
+            <h3 style={{ marginBottom: '20px', color: '#333' }}>
+              Rate Your Service Experience
+            </h3>
+
+            <div style={{ marginBottom: '20px' }}>
+              <p style={{ color: '#666', marginBottom: '10px' }}>
+                Service: <strong>{selectedRequest.subcategory_name}</strong>
+              </p>
+              <p style={{ color: '#666', marginBottom: '20px' }}>
+                Provider: <strong>{selectedRequest.provider}</strong>
+              </p>
+            </div>
+
+            {/* Star Rating */}
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '10px', fontWeight: '600' }}>
+                Rating *
+              </label>
+              <div style={{ display: 'flex', gap: '5px' }}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setRating(star)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      fontSize: '30px',
+                      cursor: 'pointer',
+                      color: star <= rating ? '#FFD700' : '#ddd',
+                      transition: 'color 0.2s ease'
+                    }}
+                  >
+                    ⭐
+                  </button>
+                ))}
+              </div>
+              <small style={{ color: '#666' }}>
+                {rating === 0 && 'Please select a rating'}
+                {rating === 1 && 'Poor'}
+                {rating === 2 && 'Fair'}
+                {rating === 3 && 'Good'}
+                {rating === 4 && 'Very Good'}
+                {rating === 5 && 'Excellent'}
+              </small>
+            </div>
+
+            {/* Review Text */}
+            <div style={{ marginBottom: '30px' }}>
+              <label style={{ display: 'block', marginBottom: '10px', fontWeight: '600' }}>
+                Review (Optional)
+              </label>
+              <textarea
+                value={review}
+                onChange={(e) => setReview(e.target.value)}
+                placeholder="Share your experience with this service provider..."
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  minHeight: '100px',
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={closeRatingModal}
+                disabled={ratingLoading}
+                style={{
+                  padding: '12px 24px',
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  background: 'white',
+                  color: '#666',
+                  cursor: ratingLoading ? 'not-allowed' : 'pointer',
+                  fontSize: '16px'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitRating}
+                disabled={ratingLoading || rating === 0}
+                style={{
+                  padding: '12px 24px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  background: rating === 0 ? '#ccc' : 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)',
+                  color: 'white',
+                  cursor: (ratingLoading || rating === 0) ? 'not-allowed' : 'pointer',
+                  fontSize: '16px',
+                  fontWeight: '600'
+                }}
+              >
+                {ratingLoading ? 'Submitting...' : 'Submit Rating'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

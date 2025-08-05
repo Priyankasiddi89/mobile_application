@@ -27,6 +27,8 @@ interface DashboardStats {
   completion_rate: number;
   registered_services_count: number;
   recent_activity: any[];
+  average_rating?: number;
+  total_reviews?: number;
 }
 
 interface Booking {
@@ -304,6 +306,9 @@ export default function ProviderDashboardCatchAll() {
         {/* Previous bookings section */}
         {section === "previous" && <PreviousBookings user={user} />}
 
+        {/* Ratings section */}
+        {section === "ratings" && <ProviderRatings user={user} />}
+
         {/* Earnings section */}
         {section === "earnings" && <EarningsSection user={user} />}
 
@@ -416,6 +421,22 @@ function ServiceProviderHome({ user }: { user: User }) {
             onClick={() => router.push('/service_provider_dashboard/previous')}
           >
             View History
+          </button>
+        </div>
+
+        <div style={{ background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid #e9ecef' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+            <div style={{ fontSize: '24px', marginRight: '12px' }}>⭐</div>
+            <h3 style={{ margin: 0, color: '#495057', fontSize: '16px' }}>Your Rating</h3>
+          </div>
+          <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#f39c12', marginBottom: '8px' }}>
+            {stats?.average_rating ? `${stats.average_rating}/5` : 'N/A'}
+          </div>
+          <button
+            style={{ padding: '8px 16px', borderRadius: 6, background: '#f39c12', color: 'white', border: 'none', cursor: 'pointer', fontSize: '14px', width: '100%' }}
+            onClick={() => router.push('/service_provider_dashboard/ratings')}
+          >
+            View Reviews
           </button>
         </div>
 
@@ -2940,6 +2961,191 @@ function EarningsSection({ user }: { user: User }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ProviderRatings({ user }: { user: User }) {
+  const [ratings, setRatings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    total_ratings: 0,
+    average_rating: 0,
+    provider_name: ''
+  });
+
+  useEffect(() => {
+    fetchRatings();
+  }, []);
+
+  const fetchRatings = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) return;
+
+      // Get user ID for ratings endpoint
+      const userResponse = await fetch("http://localhost:8000/api/auth/me/", {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+
+      if (userResponse.ok) {
+        const userData = await userResponse.json();
+        const userId = userData.id;
+
+        // Fetch provider ratings
+        const response = await fetch(`http://localhost:8000/api/bookings/provider/${userId}/ratings/`);
+
+        if (response.ok) {
+          const data = await response.json();
+          setRatings(data.ratings || []);
+          setStats({
+            total_ratings: data.total_ratings || 0,
+            average_rating: data.average_rating || 0,
+            provider_name: data.provider_name || user.username
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching ratings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderStars = (rating: number) => {
+    return Array.from({ length: 5 }, (_, i) => (
+      <span key={i} style={{ color: i < rating ? '#FFD700' : '#ddd' }}>⭐</span>
+    ));
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  if (loading) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        <div style={{ fontSize: '18px', color: '#666' }}>Loading your ratings...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+      <div style={{
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        borderRadius: '20px',
+        padding: '30px',
+        color: 'white',
+        marginBottom: '30px'
+      }}>
+        <h2 style={{ margin: '0 0 20px 0', fontSize: '2rem', fontWeight: 700 }}>
+          ⭐ Your Ratings & Reviews
+        </h2>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '2.5rem', fontWeight: 'bold', marginBottom: '5px' }}>
+              {stats.average_rating.toFixed(1)}
+            </div>
+            <div style={{ opacity: 0.9 }}>Average Rating</div>
+            <div style={{ marginTop: '5px' }}>
+              {renderStars(Math.round(stats.average_rating))}
+            </div>
+          </div>
+
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '2.5rem', fontWeight: 'bold', marginBottom: '5px' }}>
+              {stats.total_ratings}
+            </div>
+            <div style={{ opacity: 0.9 }}>Total Ratings</div>
+          </div>
+
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '2.5rem', fontWeight: 'bold', marginBottom: '5px' }}>
+              {ratings.filter(rating => rating.review && rating.review.trim()).length}
+            </div>
+            <div style={{ opacity: 0.9 }}>Written Reviews</div>
+          </div>
+        </div>
+      </div>
+
+      {(() => {
+        const ratingsWithReviews = ratings.filter(rating => rating.review && rating.review.trim());
+
+        if (ratingsWithReviews.length === 0) {
+          return (
+            <div style={{
+              textAlign: 'center',
+              padding: '60px 20px',
+              background: 'white',
+              borderRadius: '20px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
+            }}>
+              <div style={{ fontSize: '3rem', marginBottom: '20px' }}>⭐</div>
+              <h3 style={{ color: '#666', marginBottom: '10px' }}>
+                {ratings.length === 0 ? 'No Ratings Yet' : 'No Written Reviews Yet'}
+              </h3>
+              <p style={{ color: '#999' }}>
+                {ratings.length === 0
+                  ? 'Complete some services to start receiving reviews from customers!'
+                  : `You have ${ratings.length} star rating${ratings.length !== 1 ? 's' : ''}, but no written reviews yet. Encourage customers to leave detailed feedback!`
+                }
+              </p>
+            </div>
+          );
+        }
+
+        return (
+          <div style={{ display: 'grid', gap: '20px' }}>
+            {ratingsWithReviews.map((rating, index) => (
+            <div
+              key={rating.id || index}
+              style={{
+                background: 'white',
+                borderRadius: '15px',
+                padding: '25px',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+                border: '1px solid #f0f0f0'
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '1.2rem' }}>
+                      {renderStars(rating.rating)}
+                    </div>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 'bold', color: '#333' }}>
+                      {rating.rating}/5
+                    </span>
+                  </div>
+                  <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                    By {rating.customer} • {formatDate(rating.created_at)}
+                  </div>
+                </div>
+
+              </div>
+
+              <div style={{
+                background: '#f8f9fa',
+                padding: '15px',
+                borderRadius: '10px',
+                borderLeft: '4px solid #667eea',
+                fontStyle: 'italic',
+                color: '#555',
+                lineHeight: 1.6
+              }}>
+                "{rating.review}"
+              </div>
+            </div>
+          ))}
+        </div>
+        );
+      })()}
     </div>
   );
 }

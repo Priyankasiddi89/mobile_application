@@ -130,20 +130,3 @@ class ProviderRating(models.Model):
 
     def __str__(self):
         return f"{self.customer.username} rated {self.provider.username}: {self.rating}/5"
-
-
-# Provider Rating System
-class ProviderRating(models.Model):
-    provider = models.ForeignKey('authentication.User', on_delete=models.CASCADE, related_name='received_ratings')
-    customer = models.ForeignKey('authentication.User', on_delete=models.CASCADE, related_name='given_ratings')
-    booking = models.OneToOneField('Booking', on_delete=models.CASCADE, related_name='rating')
-    rating = models.IntegerField(choices=[(i, i) for i in range(1, 6)], help_text="Rating from 1 to 5 stars")
-    review = models.TextField(blank=True, help_text="Customer's review of the service")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = 'provider_ratings'
-        unique_together = ['provider', 'customer', 'booking']
-
-    def __str__(self):
-        return f"{self.customer.username} rated {self.provider.username}: {self.rating}/5"

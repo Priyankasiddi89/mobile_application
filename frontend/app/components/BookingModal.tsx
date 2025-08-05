@@ -33,6 +33,10 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
   const [notes, setNotes] = useState("");
   const [address, setAddress] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showReviewsModal, setShowReviewsModal] = useState(false);
+  const [selectedProviderReviews, setSelectedProviderReviews] = useState<any>(null);
+  const [providerReviews, setProviderReviews] = useState<any[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
   const [error, setError] = useState("");
   const [providers, setProviders] = useState<Provider[]>([]);
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
@@ -97,6 +101,35 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
     setNotes("");
     setAddress("");
     setError("");
+  };
+
+  const handleViewReviews = async (provider: any) => {
+    setSelectedProviderReviews(provider);
+    setShowReviewsModal(true);
+    setReviewsLoading(true);
+
+    try {
+      const response = await fetch(`http://localhost:8000/api/bookings/provider/${provider.provider_id}/ratings/`);
+
+      if (response.ok) {
+        const data = await response.json();
+        setProviderReviews(data.ratings || []);
+      } else {
+        console.error('Failed to fetch reviews');
+        setProviderReviews([]);
+      }
+    } catch (error) {
+      console.error('Error fetching reviews:', error);
+      setProviderReviews([]);
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+
+  const closeReviewsModal = () => {
+    setShowReviewsModal(false);
+    setSelectedProviderReviews(null);
+    setProviderReviews([]);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -305,9 +338,23 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
                             {provider.rating > 0 && (
                               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <span style={{ color: '#ffc107' }}>⭐</span>
-                                <span style={{ fontSize: '14px', color: '#666' }}>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleViewReviews(provider);
+                                  }}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    fontSize: '14px',
+                                    color: '#667eea',
+                                    cursor: 'pointer',
+                                    textDecoration: 'underline',
+                                    padding: 0
+                                  }}
+                                >
                                   {provider.rating} ({provider.total_reviews} reviews)
-                                </span>
+                                </button>
                               </div>
                             )}
                           </div>
@@ -567,6 +614,152 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
           </div>
         )}
       </div>
+
+      {/* Reviews Modal */}
+      {showReviewsModal && selectedProviderReviews && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 2000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '20px',
+            padding: '30px',
+            maxWidth: '600px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflow: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ margin: 0, color: '#333' }}>
+                Reviews for {selectedProviderReviews.provider_name}
+              </h3>
+              <button
+                onClick={closeReviewsModal}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  color: '#999'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ marginBottom: '20px', padding: '15px', background: '#f8f9fa', borderRadius: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
+                <span style={{ fontSize: '24px', color: '#ffc107' }}>⭐</span>
+                <span style={{ fontSize: '20px', fontWeight: 'bold' }}>
+                  {selectedProviderReviews.rating}/5
+                </span>
+                <span style={{ color: '#666' }}>
+                  ({selectedProviderReviews.total_ratings} ratings, {selectedProviderReviews.total_reviews} reviews)
+                </span>
+              </div>
+              <div style={{ color: '#666', fontSize: '14px' }}>
+                ✅ {selectedProviderReviews.completed_bookings} completed bookings
+              </div>
+            </div>
+
+            {reviewsLoading ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+                Loading reviews...
+              </div>
+            ) : (() => {
+              const reviewsWithText = providerReviews.filter(review => review.review && review.review.trim());
+
+              if (reviewsWithText.length === 0) {
+                return (
+                  <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>⭐</div>
+                    <h4>No written reviews yet</h4>
+                    <p>
+                      {providerReviews.length === 0
+                        ? "This provider hasn't received any ratings yet."
+                        : `This provider has ${providerReviews.length} star rating${providerReviews.length !== 1 ? 's' : ''} but no written reviews yet.`
+                      }
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div style={{ display: 'grid', gap: '15px' }}>
+                  {reviewsWithText.map((review, index) => (
+                  <div
+                    key={review.id || index}
+                    style={{
+                      border: '1px solid #e9ecef',
+                      borderRadius: '10px',
+                      padding: '15px',
+                      background: '#fafafa'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '5px' }}>
+                          {Array.from({ length: 5 }, (_, i) => (
+                            <span key={i} style={{ color: i < review.rating ? '#ffc107' : '#ddd' }}>⭐</span>
+                          ))}
+                          <span style={{ marginLeft: '5px', fontWeight: 'bold' }}>
+                            {review.rating}/5
+                          </span>
+                        </div>
+                        <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                          By {review.customer}
+                        </div>
+                      </div>
+                      <div style={{ color: '#999', fontSize: '0.8rem' }}>
+                        {new Date(review.created_at).toLocaleDateString()}
+                      </div>
+                    </div>
+
+                    <div style={{
+                      marginTop: '10px',
+                      padding: '10px',
+                      background: 'white',
+                      borderRadius: '8px',
+                      fontStyle: 'italic',
+                      color: '#555',
+                      lineHeight: 1.5
+                    }}>
+                      "{review.review}"
+                    </div>
+                  </div>
+                ))}
+              </div>
+              );
+            })()}
+
+            <div style={{ marginTop: '20px', textAlign: 'center' }}>
+              <button
+                onClick={closeReviewsModal}
+                style={{
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  background: '#667eea',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '16px'
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

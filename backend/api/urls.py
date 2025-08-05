@@ -17,7 +17,7 @@ from .services import (
 from .bookings import (
     create_booking, get_user_bookings, get_provider_bookings, get_provider_requests,
     update_booking_status, accept_booking_request, decline_booking_request, complete_booking,
-    cancel_booking_request
+    cancel_booking_request, create_provider_rating, get_provider_ratings
 )
 from .analytics import (
     get_customer_dashboard_stats, get_provider_dashboard_stats,
@@ -56,6 +56,8 @@ urlpatterns = [
     path('bookings/<int:booking_id>/decline/', decline_booking_request, name='api_decline_booking'),
     path('bookings/<int:booking_id>/complete/', complete_booking, name='api_complete_booking'),
     path('bookings/<int:booking_id>/cancel/', cancel_booking_request, name='api_cancel_booking'),
+    path('bookings/rate-provider/', create_provider_rating, name='api_create_rating'),
+    path('bookings/provider/<int:provider_id>/ratings/', get_provider_ratings, name='api_provider_ratings'),
 
     # Analytics API endpoints
     path('analytics/customer/dashboard/', get_customer_dashboard_stats, name='api_customer_dashboard_stats'),

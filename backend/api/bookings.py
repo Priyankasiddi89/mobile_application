@@ -7,8 +7,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils import timezone
-from bookings.models import Booking, ServiceSubcategory, UserRegisteredService
-from bookings.serializers import BookingSerializer
+from bookings.models import Booking, ServiceSubcategory, UserRegisteredService, ProviderRating
+from bookings.serializers import BookingSerializer, ProviderRatingSerializer, ProviderRatingCreateSerializer
 from authentication.views import PostgreSQLJWTAuthentication
 
 
@@ -530,6 +530,141 @@ def cancel_booking_request(request, booking_id):
             'message': f'Booking cancelled successfully by {user_type_text.lower()}',
             'booking': serializer.data,
             'cancelled_by': booking.cancelled_by
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@authentication_classes([PostgreSQLJWTAuthentication])
+@permission_classes([IsAuthenticated])
+def create_provider_rating(request):
+    """
+    Create a rating for a provider after service completion
+    POST /api/bookings/rate-provider/
+    Body: {
+        "booking_id": "123",
+        "rating": 5,
+        "review": "Excellent service!"
+    }
+    """
+    try:
+        if request.user.user_type != 'End User':
+            return Response(
+                {'error': 'Only customers can rate providers'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        serializer = ProviderRatingCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {'error': serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        booking_id = serializer.validated_data['booking_id']
+        rating_value = serializer.validated_data['rating']
+        review_text = serializer.validated_data.get('review', '')
+
+        # Get booking
+        try:
+            booking = Booking.objects.get(
+                id=booking_id,
+                customer=request.user.username,
+                status='completed'
+            )
+        except Booking.DoesNotExist:
+            return Response(
+                {'error': 'Completed booking not found or you do not have permission to rate it'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check if rating already exists
+        if ProviderRating.objects.filter(booking=booking).exists():
+            return Response(
+                {'error': 'You have already rated this service'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Get provider user object
+        from authentication.models import User
+        try:
+            provider_user = User.objects.get(username=booking.provider)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'Provider not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Create rating
+        rating = ProviderRating.objects.create(
+            provider=provider_user,
+            customer=request.user,
+            booking=booking,
+            rating=rating_value,
+            review=review_text
+        )
+
+        serializer = ProviderRatingSerializer(rating)
+        return Response({
+            'message': 'Rating submitted successfully',
+            'rating': serializer.data
+        }, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+def get_provider_ratings(request, provider_id):
+    """
+    Get all ratings for a specific provider
+    GET /api/bookings/provider/{provider_id}/ratings/
+    """
+    try:
+        from authentication.models import User
+
+        # Get provider user
+        try:
+            provider = User.objects.get(id=provider_id, user_type='Service Provider')
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'Provider not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Get all ratings for this provider
+        ratings = ProviderRating.objects.filter(provider=provider).order_by('-created_at')
+
+        # Calculate average rating
+        total_ratings = ratings.count()
+        if total_ratings > 0:
+            average_rating = sum(rating.rating for rating in ratings) / total_ratings
+            average_rating = round(average_rating, 1)
+        else:
+            average_rating = 0
+
+        # Count ratings with review text
+        ratings_with_reviews = ratings.filter(review__isnull=False).exclude(review='').exclude(review__exact='')
+        total_reviews = ratings_with_reviews.count()
+
+        # Serialize ratings
+        serializer = ProviderRatingSerializer(ratings, many=True)
+
+        return Response({
+            'provider_id': provider_id,
+            'provider_name': provider.username,
+            'total_ratings': total_ratings,
+            'total_reviews': total_reviews,
+            'average_rating': average_rating,
+            'ratings': serializer.data
         }, status=status.HTTP_200_OK)
 
     except Exception as e:

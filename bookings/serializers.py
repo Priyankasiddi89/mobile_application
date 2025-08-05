@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ServiceCategory, ServiceSubcategory, Booking
+from .models import ServiceCategory, ServiceSubcategory, Booking, ProviderRating
 from datetime import datetime
 from django.utils import timezone
 
@@ -70,4 +70,29 @@ class BookingCreateSerializer(serializers.Serializer):
         # Ensure service date is in the future
         if value <= timezone.now():
             raise serializers.ValidationError("Service date must be in the future")
-        return value 
+        return value
+
+class ProviderRatingSerializer(serializers.Serializer):
+    id = serializers.SerializerMethodField()
+    provider = serializers.CharField()
+    customer = serializers.CharField()
+    booking_id = serializers.SerializerMethodField()
+    rating = serializers.IntegerField()
+    review = serializers.CharField(allow_blank=True)
+    created_at = serializers.DateTimeField(read_only=True)
+
+    def get_id(self, obj):
+        return str(obj.id)
+
+    def get_booking_id(self, obj):
+        return str(obj.booking.id)
+
+class ProviderRatingCreateSerializer(serializers.Serializer):
+    booking_id = serializers.CharField()
+    rating = serializers.IntegerField(min_value=1, max_value=5)
+    review = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_rating(self, value):
+        if value < 1 or value > 5:
+            raise serializers.ValidationError("Rating must be between 1 and 5")
+        return value

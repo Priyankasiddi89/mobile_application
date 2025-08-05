@@ -7,7 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.db.models import Count, Sum
-from bookings.models import Booking, UserRegisteredService
+from bookings.models import Booking, UserRegisteredService, ProviderRating
 from authentication.views import PostgreSQLJWTAuthentication
 
 
@@ -154,13 +154,23 @@ def get_provider_dashboard_stats(request):
         
         # Get earnings by service
         earnings_by_service = provider_bookings.filter(
-            status='completed', 
+            status='completed',
             payment_status='paid'
         ).values('subcategory__name').annotate(
             total_earnings=Sum('total_price'),
             job_count=Count('id')
         ).order_by('-total_earnings')
-        
+
+        # Calculate rating statistics
+        provider_ratings = ProviderRating.objects.filter(provider=request.user)
+        total_reviews = provider_ratings.count()
+
+        if total_reviews > 0:
+            average_rating = sum(rating.rating for rating in provider_ratings) / total_reviews
+            average_rating = round(average_rating, 1)
+        else:
+            average_rating = 0
+
         return Response({
             'total_bookings': assigned_bookings_count,  # Only assigned bookings for success rate
             'pending_requests_count': filtered_pending_count,
@@ -173,6 +183,8 @@ def get_provider_dashboard_stats(request):
             'weekly_completed_jobs': weekly_completed_jobs,
             'completion_rate': completion_rate,
             'registered_services_count': len(registered_services),
+            'average_rating': average_rating,
+            'total_reviews': total_reviews,
             'earnings_by_service': list(earnings_by_service),
             'recent_bookings': provider_bookings.order_by('-created_at')[:5].values(
                 'id', 'customer', 'subcategory__name', 'status', 'service_date', 'total_price'
