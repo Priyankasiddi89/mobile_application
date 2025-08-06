@@ -42,6 +42,8 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
   const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [loadingProviders, setLoadingProviders] = useState(false);
   const [step, setStep] = useState<'providers' | 'booking'>('providers');
+  const [sortBy, setSortBy] = useState<'name' | 'price' | 'rating'>('rating');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
   const timeSlots = [
     "09:00", "10:00", "11:00", "12:00", "13:00", 
@@ -130,6 +132,39 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
     setShowReviewsModal(false);
     setSelectedProviderReviews(null);
     setProviderReviews([]);
+  };
+
+  const getSortedProviders = () => {
+    if (!providers.length) return [];
+
+    const sorted = [...providers].sort((a, b) => {
+      let aValue, bValue;
+
+      switch (sortBy) {
+        case 'name':
+          aValue = a.provider_name.toLowerCase();
+          bValue = b.provider_name.toLowerCase();
+          break;
+        case 'price':
+          aValue = a.provider_price || 0;
+          bValue = b.provider_price || 0;
+          break;
+        case 'rating':
+          aValue = a.rating || 0;
+          bValue = b.rating || 0;
+          break;
+        default:
+          return 0;
+      }
+
+      if (sortOrder === 'asc') {
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+      } else {
+        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+      }
+    });
+
+    return sorted;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -302,11 +337,95 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
               </div>
             ) : (
               <div>
-                <div style={{ marginBottom: '16px', color: '#666', fontSize: '14px' }}>
-                  Found {providers.length} provider{providers.length !== 1 ? 's' : ''} available for this service
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '16px',
+                  color: '#666',
+                  fontSize: '14px'
+                }}>
+                  <span>Found {providers.length} provider{providers.length !== 1 ? 's' : ''} available for this service</span>
+                  {providers.length > 1 && (
+                    <span style={{ fontSize: '12px', color: '#999' }}>
+                      Sorted by {sortBy} ({sortOrder === 'desc' ? 'high to low' : 'low to high'})
+                    </span>
+                  )}
                 </div>
+
+                {/* Sort Controls */}
+                {providers.length > 1 && (
+                  <div style={{
+                    display: 'flex',
+                    gap: '12px',
+                    alignItems: 'center',
+                    marginBottom: '16px',
+                    padding: '12px',
+                    background: '#f8f9fa',
+                    borderRadius: '8px',
+                    border: '1px solid #e9ecef'
+                  }}>
+                    <span style={{
+                      color: '#495057',
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      minWidth: 'fit-content'
+                    }}>
+                      Sort by:
+                    </span>
+
+                    <select
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as 'name' | 'price' | 'rating')}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #ced4da',
+                        background: 'white',
+                        color: '#495057',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        outline: 'none',
+                        flex: 1
+                      }}
+                    >
+                      <option value="rating">⭐ Rating ({sortOrder === 'desc' ? 'Best First' : 'Lowest First'})</option>
+                      <option value="price">💰 Price ({sortOrder === 'desc' ? 'High to Low' : 'Low to High'})</option>
+                      <option value="name">📝 Name ({sortOrder === 'desc' ? 'Z to A' : 'A to Z'})</option>
+                    </select>
+
+                    <button
+                      onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #ced4da',
+                        background: 'white',
+                        color: '#495057',
+                        fontSize: '14px',
+                        cursor: 'pointer',
+                        outline: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        minWidth: 'fit-content',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#e9ecef';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'white';
+                      }}
+                    >
+                      {sortOrder === 'asc' ? '↑' : '↓'}
+                      {sortOrder === 'asc' ? 'Low to High' : 'High to Low'}
+                    </button>
+                  </div>
+                )}
+
                 <div style={{ display: 'grid', gap: '12px', maxHeight: '400px', overflowY: 'auto' }}>
-                  {providers.map((provider) => (
+                  {getSortedProviders().map((provider) => (
                     <div
                       key={provider.provider_id}
                       onClick={() => handleProviderSelect(provider)}

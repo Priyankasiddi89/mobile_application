@@ -1560,6 +1560,9 @@ function ServicesSection({ user }: { user: User }) {
   const [categories, setCategories] = useState<any[]>([]);
   const [subcategories, setSubcategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'name' | 'price'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const router = useRouter();
 
   // Fetch categories and subcategories from backend
@@ -1589,6 +1592,11 @@ function ServicesSection({ user }: { user: User }) {
     fetchData();
   }, []);
 
+  // Handle category selection
+  const handleCategorySelect = (categoryName: string) => {
+    setSelectedCategory(categoryName);
+  };
+
   // Helper function to get category icon
   const getCategoryIcon = (categoryName: string) => {
     const iconMap: { [key: string]: string } = {
@@ -1601,6 +1609,59 @@ function ServicesSection({ user }: { user: User }) {
       'default': '🏠'
     };
     return iconMap[categoryName] || iconMap.default;
+  };
+
+  // Filter and sort functions
+  const getFilteredAndSortedSubcategories = () => {
+    if (!selectedCategory || !categoryData[selectedCategory]) return [];
+
+    let filtered = categoryData[selectedCategory].subcategories;
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      filtered = filtered.filter((sub: any) =>
+        sub.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        sub.description.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // Apply sorting
+    filtered.sort((a: any, b: any) => {
+      let aValue, bValue;
+
+      switch (sortBy) {
+        case 'name':
+          aValue = a.name.toLowerCase();
+          bValue = b.name.toLowerCase();
+          break;
+        case 'price':
+          aValue = parseFloat(a.priceRange.replace('$', ''));
+          bValue = parseFloat(b.priceRange.replace('$', ''));
+          break;
+        default:
+          return 0;
+      }
+
+      if (sortOrder === 'asc') {
+        return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+      } else {
+        return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+      }
+    });
+
+    return filtered;
+  };
+
+  const getFilteredCategories = () => {
+    if (!searchQuery.trim()) return Object.keys(categoryData);
+
+    return Object.keys(categoryData).filter(category =>
+      category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      categoryData[category].subcategories.some((sub: any) =>
+        sub.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        sub.description.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    );
   };
 
   // Create category data structure from backend data
@@ -1810,6 +1871,132 @@ function ServicesSection({ user }: { user: User }) {
         }}>Choose a category to browse available services</p>
       </div>
 
+      {/* Search and Sort Controls */}
+      <div style={{
+        position: 'relative',
+        zIndex: 1,
+        marginBottom: 30,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 20,
+        alignItems: 'center'
+      }}>
+        {/* Search Bar */}
+        <div style={{
+          position: 'relative',
+          width: '100%',
+          maxWidth: 600
+        }}>
+          <input
+            type="text"
+            placeholder="Search services globally..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '16px 20px 16px 50px',
+              borderRadius: 25,
+              border: '1px solid rgba(255,255,255,0.3)',
+              background: 'rgba(255,255,255,0.95)',
+              backdropFilter: 'blur(10px)',
+              fontSize: '16px',
+              fontWeight: 500,
+              color: '#333',
+              outline: 'none',
+              boxShadow: '0 8px 25px rgba(0,0,0,0.1)',
+              transition: 'all 0.3s ease'
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.boxShadow = '0 12px 35px rgba(0,0,0,0.15)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.1)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+          />
+          <div style={{
+            position: 'absolute',
+            left: 18,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            fontSize: '18px',
+            color: '#666'
+          }}>
+            🔍
+          </div>
+        </div>
+
+        {/* Sort Controls - Only show when category is selected */}
+        {selectedCategory && (
+          <div style={{
+            display: 'flex',
+            gap: 15,
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            justifyContent: 'center'
+          }}>
+            <span style={{
+              color: 'rgba(255,255,255,0.9)',
+              fontWeight: 600,
+              fontSize: '14px'
+            }}>
+              Sort by:
+            </span>
+
+
+
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'name' | 'price')}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 15,
+                border: '1px solid rgba(255,255,255,0.3)',
+                background: 'rgba(255,255,255,0.95)',
+                color: '#333',
+                fontSize: '14px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                outline: 'none'
+              }}
+            >
+              <option value="name">Service Name</option>
+              <option value="price">Price</option>
+            </select>
+
+            <button
+              onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 15,
+                border: '1px solid rgba(255,255,255,0.3)',
+                background: 'rgba(255,255,255,0.95)',
+                color: '#333',
+                fontSize: '14px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                outline: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                transition: 'all 0.2s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255,255,255,1)';
+                e.currentTarget.style.transform = 'translateY(-1px)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.95)';
+                e.currentTarget.style.transform = 'translateY(0)';
+              }}
+            >
+              {sortOrder === 'asc' ? '↑' : '↓'} {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+            </button>
+          </div>
+        )}
+      </div>
+
       {!selectedCategory ? (
         <div style={{ position: 'relative', zIndex: 1 }}>
           <div style={{ 
@@ -1817,7 +2004,7 @@ function ServicesSection({ user }: { user: User }) {
             gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
             gap: 20 
           }}>
-            {Object.keys(categoryData).map((category, index) => {
+            {getFilteredCategories().map((category, index) => {
               const iconData = categoryIcons[category] || {
                 icon: getCategoryIcon(category),
                 gradient: 'linear-gradient(135deg,rgb(122, 77, 245) 0%, #764ba2 100%)',
@@ -1826,7 +2013,7 @@ function ServicesSection({ user }: { user: User }) {
               return (
                 <div
                   key={index}
-                  onClick={() => setSelectedCategory(category)}
+                  onClick={() => handleCategorySelect(category)}
                   style={{
                     background: iconData?.gradient || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                     borderRadius: 25,
@@ -1885,6 +2072,51 @@ function ServicesSection({ user }: { user: User }) {
               );
             })}
           </div>
+
+          {/* No Categories Found Message */}
+          {getFilteredCategories().length === 0 && searchQuery.trim() && (
+            <div style={{
+              textAlign: 'center',
+              padding: '60px 20px',
+              background: 'rgba(255,255,255,0.95)',
+              borderRadius: 25,
+              marginTop: 20,
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 15px 35px rgba(0,0,0,0.1)'
+            }}>
+              <div style={{ fontSize: '3rem', marginBottom: 20 }}>🔍</div>
+              <h3 style={{ color: '#666', marginBottom: 10, fontSize: '1.5rem' }}>
+                No categories found
+              </h3>
+              <p style={{ color: '#999', fontSize: '1rem', marginBottom: 20 }}>
+                No categories or services match your search "{searchQuery}"
+              </p>
+              <button
+                onClick={() => setSearchQuery('')}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: 20,
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                Clear Search
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ position: 'relative', zIndex: 1 }}>
@@ -1950,7 +2182,7 @@ function ServicesSection({ user }: { user: User }) {
             gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
             gap: 20 
           }}>
-            {categoryData[selectedCategory].subcategories.map((sub, index) => (
+            {getFilteredAndSortedSubcategories().map((sub, index) => (
               <div key={index} style={{
                 background: 'rgba(255,255,255,0.95)',
                 borderRadius: 25,
@@ -2000,16 +2232,18 @@ function ServicesSection({ user }: { user: User }) {
                     }}>
                       {sub.description}
                     </p>
-                    <div style={{ 
-                      color: '#667eea', 
-                      fontWeight: 700, 
-                      fontSize: '1.1rem' 
+                    <div style={{
+                      color: '#667eea',
+                      fontWeight: 700,
+                      fontSize: '1.1rem'
                     }}>
                       {sub.priceRange}
                     </div>
                   </div>
                 </div>
-                
+
+
+
                 <button
                   style={{
                     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -2053,6 +2287,51 @@ function ServicesSection({ user }: { user: User }) {
               </div>
             ))}
           </div>
+
+          {/* No Results Message */}
+          {getFilteredAndSortedSubcategories().length === 0 && searchQuery.trim() && (
+            <div style={{
+              textAlign: 'center',
+              padding: '60px 20px',
+              background: 'rgba(255,255,255,0.95)',
+              borderRadius: 25,
+              marginTop: 20,
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 15px 35px rgba(0,0,0,0.1)'
+            }}>
+              <div style={{ fontSize: '3rem', marginBottom: 20 }}>🔍</div>
+              <h3 style={{ color: '#666', marginBottom: 10, fontSize: '1.5rem' }}>
+                No services found
+              </h3>
+              <p style={{ color: '#999', fontSize: '1rem', marginBottom: 20 }}>
+                No services match your search "{searchQuery}" in {selectedCategory}
+              </p>
+              <button
+                onClick={() => setSearchQuery('')}
+                style={{
+                  padding: '12px 24px',
+                  borderRadius: 20,
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                Clear Search
+              </button>
+            </div>
+          )}
         </div>
       )}
 
