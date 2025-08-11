@@ -7,8 +7,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils import timezone
-from bookings.models import Booking, ServiceSubcategory, UserRegisteredService, ProviderRating
-from bookings.serializers import BookingSerializer, ProviderRatingSerializer, ProviderRatingCreateSerializer
+from bookings.models import Booking, ServiceSubcategory, UserRegisteredService, ProviderRating, ProviderAvailability, ProviderOffDay
+from bookings.serializers import (
+    BookingSerializer, ProviderRatingSerializer, ProviderRatingCreateSerializer,
+    ProviderAvailabilitySerializer, ProviderAvailabilityCreateSerializer,
+    ProviderOffDaySerializer, ProviderOffDayCreateSerializer
+)
 from authentication.views import PostgreSQLJWTAuthentication
 
 
@@ -665,6 +669,337 @@ def get_provider_ratings(request, provider_id):
             'total_reviews': total_reviews,
             'average_rating': average_rating,
             'ratings': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+# ===== PROVIDER AVAILABILITY MANAGEMENT =====
+
+@api_view(['GET', 'POST'])
+@authentication_classes([PostgreSQLJWTAuthentication])
+@permission_classes([IsAuthenticated])
+def manage_provider_availability(request):
+    """
+    GET: Get provider's availability slots
+    POST: Create new availability slot
+    """
+    if request.user.user_type != 'Service Provider':
+        return Response(
+            {'error': 'Only service providers can manage availability'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    if request.method == 'GET':
+        try:
+            # Get date range from query params (default to next 30 days)
+            from datetime import date, timedelta
+            start_date = request.GET.get('start_date', date.today())
+            end_date = request.GET.get('end_date', date.today() + timedelta(days=30))
+
+            if isinstance(start_date, str):
+                start_date = date.fromisoformat(start_date)
+            if isinstance(end_date, str):
+                end_date = date.fromisoformat(end_date)
+
+            availability_slots = ProviderAvailability.objects.filter(
+                provider=request.user,
+                date__gte=start_date,
+                date__lte=end_date
+            ).order_by('date', 'start_time')
+
+            # Get bookings for this date range
+            bookings = Booking.objects.filter(
+                provider=request.user.username,
+                service_date__date__gte=start_date,
+                service_date__date__lte=end_date,
+                status__in=['pending', 'accepted', 'active', 'completed']
+            ).order_by('service_date')
+
+            # Serialize availability slots
+            serializer = ProviderAvailabilitySerializer(availability_slots, many=True)
+
+            # Prepare booking data
+            booking_data = []
+            for booking in bookings:
+                booking_data.append({
+                    'id': str(booking.id),
+                    'date': booking.service_date.date().isoformat(),
+                    'time': booking.service_date.time().strftime('%H:%M'),
+                    'customer': booking.customer,
+                    'service': booking.subcategory.name,
+                    'status': booking.status,
+                    'address': booking.address[:50] + '...' if len(booking.address) > 50 else booking.address
+                })
+
+            return Response({
+                'availability_slots': serializer.data,
+                'bookings': booking_data,
+                'start_date': start_date,
+                'end_date': end_date
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    elif request.method == 'POST':
+        try:
+            serializer = ProviderAvailabilityCreateSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {'error': serializer.errors},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Check if slot already exists
+            existing_slot = ProviderAvailability.objects.filter(
+                provider=request.user,
+                date=serializer.validated_data['date'],
+                start_time=serializer.validated_data['start_time'],
+                end_time=serializer.validated_data['end_time']
+            ).first()
+
+            if existing_slot:
+                # Update existing slot
+                existing_slot.is_available = serializer.validated_data['is_available']
+                existing_slot.save()
+                response_serializer = ProviderAvailabilitySerializer(existing_slot)
+                return Response({
+                    'message': 'Availability slot updated',
+                    'slot': response_serializer.data
+                }, status=status.HTTP_200_OK)
+            else:
+                # Create new slot
+                availability_slot = ProviderAvailability.objects.create(
+                    provider=request.user,
+                    **serializer.validated_data
+                )
+                response_serializer = ProviderAvailabilitySerializer(availability_slot)
+                return Response({
+                    'message': 'Availability slot created',
+                    'slot': response_serializer.data
+                }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+@api_view(['GET', 'POST', 'DELETE'])
+@authentication_classes([PostgreSQLJWTAuthentication])
+@permission_classes([IsAuthenticated])
+def manage_provider_off_days(request):
+    """
+    GET: Get provider's off days
+    POST: Create new off day
+    """
+    if request.user.user_type != 'Service Provider':
+        return Response(
+            {'error': 'Only service providers can manage off days'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    if request.method == 'GET':
+        try:
+            from datetime import date, timedelta
+            start_date = request.GET.get('start_date', date.today())
+            end_date = request.GET.get('end_date', date.today() + timedelta(days=90))
+
+            if isinstance(start_date, str):
+                start_date = date.fromisoformat(start_date)
+            if isinstance(end_date, str):
+                end_date = date.fromisoformat(end_date)
+
+            off_days = ProviderOffDay.objects.filter(
+                provider=request.user,
+                date__gte=start_date,
+                date__lte=end_date
+            ).order_by('date')
+
+            serializer = ProviderOffDaySerializer(off_days, many=True)
+
+            return Response({
+                'off_days': serializer.data,
+                'start_date': start_date,
+                'end_date': end_date
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    elif request.method == 'POST':
+        try:
+            serializer = ProviderOffDayCreateSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response(
+                    {'error': serializer.errors},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Check if off day already exists
+            existing_off_day = ProviderOffDay.objects.filter(
+                provider=request.user,
+                date=serializer.validated_data['date']
+            ).first()
+
+            if existing_off_day:
+                return Response(
+                    {'error': 'Off day already exists for this date'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Create new off day
+            off_day = ProviderOffDay.objects.create(
+                provider=request.user,
+                **serializer.validated_data
+            )
+            response_serializer = ProviderOffDaySerializer(off_day)
+            return Response({
+                'message': 'Off day created',
+                'off_day': response_serializer.data
+            }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    elif request.method == 'DELETE':
+        try:
+            date_to_remove = request.data.get('date')
+            if not date_to_remove:
+                return Response(
+                    {'error': 'Date is required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Remove off day if it exists
+            deleted_count, _ = ProviderOffDay.objects.filter(
+                provider=request.user,
+                date=date_to_remove
+            ).delete()
+
+            return Response({
+                'message': f'Removed off day for {date_to_remove}' if deleted_count > 0 else 'No off day found for this date',
+                'deleted_count': deleted_count
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+@api_view(['GET'])
+def get_provider_available_slots(request, provider_id):
+    """
+    Get available time slots for a specific provider on a specific date
+    GET /api/bookings/provider/{provider_id}/available-slots/?date=2025-01-08
+    """
+    try:
+        from authentication.models import User
+        from datetime import datetime, time, timedelta
+
+        # Get provider
+        try:
+            provider = User.objects.get(id=provider_id, user_type='Service Provider')
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'Provider not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Get date from query params
+        date_str = request.GET.get('date')
+        if not date_str:
+            return Response(
+                {'error': 'Date parameter is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            selected_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return Response(
+                {'error': 'Invalid date format. Use YYYY-MM-DD'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check if provider is off on this date
+        is_off_day = ProviderOffDay.objects.filter(
+            provider=provider,
+            date=selected_date
+        ).exists()
+
+        if is_off_day:
+            return Response({
+                'provider_id': provider_id,
+                'provider_name': provider.username,
+                'date': selected_date,
+                'available_slots': [],
+                'message': 'Provider is off on this date'
+            }, status=status.HTTP_200_OK)
+
+        # Get provider's availability slots for this date
+        availability_slots = ProviderAvailability.objects.filter(
+            provider=provider,
+            date=selected_date,
+            is_available=True
+        ).order_by('start_time')
+
+        # Get existing bookings for this date
+        existing_bookings = Booking.objects.filter(
+            provider=provider.username,
+            service_date__date=selected_date,
+            status__in=['pending', 'accepted', 'active']
+        )
+
+        # Build list of available slots
+        available_slots = []
+        for slot in availability_slots:
+            # Check if this slot conflicts with existing bookings
+            from django.utils import timezone
+            slot_start = timezone.make_aware(datetime.combine(selected_date, slot.start_time))
+            slot_end = timezone.make_aware(datetime.combine(selected_date, slot.end_time))
+
+            is_slot_available = True
+            for booking in existing_bookings:
+                booking_time = booking.service_date
+                # Assume each booking takes 2 hours (can be made configurable)
+                booking_end = booking_time + timedelta(hours=2)
+
+                # Check for time overlap
+                if (slot_start < booking_end and slot_end > booking_time):
+                    is_slot_available = False
+                    break
+
+            if is_slot_available:
+                available_slots.append({
+                    'start_time': slot.start_time.strftime('%H:%M'),
+                    'end_time': slot.end_time.strftime('%H:%M'),
+                    'display_time': f"{slot.start_time.strftime('%I:%M %p')} - {slot.end_time.strftime('%I:%M %p')}"
+                })
+
+        return Response({
+            'provider_id': provider_id,
+            'provider_name': provider.username,
+            'date': selected_date,
+            'available_slots': available_slots,
+            'total_slots': len(available_slots)
         }, status=status.HTTP_200_OK)
 
     except Exception as e:

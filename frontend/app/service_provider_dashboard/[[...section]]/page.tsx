@@ -309,6 +309,9 @@ export default function ProviderDashboardCatchAll() {
         {/* Ratings section */}
         {section === "ratings" && <ProviderRatings user={user} />}
 
+        {/* Availability section */}
+        {section === "availability" && <AvailabilityManagement user={user} />}
+
         {/* Earnings section */}
         {section === "earnings" && <EarningsSection user={user} />}
 
@@ -437,6 +440,22 @@ function ServiceProviderHome({ user }: { user: User }) {
             onClick={() => router.push('/service_provider_dashboard/ratings')}
           >
             View Reviews
+          </button>
+        </div>
+
+        <div style={{ background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid #e9ecef' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
+            <div style={{ fontSize: '24px', marginRight: '12px' }}>📅</div>
+            <h3 style={{ margin: 0, color: '#495057', fontSize: '16px' }}>Availability</h3>
+          </div>
+          <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#667eea', marginBottom: '8px' }}>
+            Manage
+          </div>
+          <button
+            style={{ padding: '8px 16px', borderRadius: 6, background: '#667eea', color: 'white', border: 'none', cursor: 'pointer', fontSize: '14px', width: '100%' }}
+            onClick={() => router.push('/service_provider_dashboard/availability')}
+          >
+            Set Schedule
           </button>
         </div>
 
@@ -3146,6 +3165,643 @@ function ProviderRatings({ user }: { user: User }) {
         </div>
         );
       })()}
+    </div>
+  );
+}
+
+function AvailabilityManagement({ user }: { user: User }) {
+  const [availabilityData, setAvailabilityData] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showManageModal, setShowManageModal] = useState(false);
+  const [selectedDate, setSelectedDate] = useState('');
+  const [slotStates, setSlotStates] = useState<{[key: string]: boolean}>({});
+  const [saving, setSaving] = useState(false);
+
+  // Default time slots - these are the 4 standard slots
+  const timeSlots = [
+    { start: '09:00', end: '12:00', label: '9 AM - 12 PM' },
+    { start: '12:00', end: '15:00', label: '12 PM - 3 PM' },
+    { start: '15:00', end: '18:00', label: '3 PM - 6 PM' },
+    { start: '18:00', end: '21:00', label: '6 PM - 9 PM' }
+  ];
+
+  useEffect(() => {
+    loadAvailabilityData();
+  }, []);
+
+  const loadAvailabilityData = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) return;
+
+      const response = await fetch("http://localhost:8000/api/bookings/availability/", {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAvailabilityData(data.availability_slots || []);
+        setBookings(data.bookings || []);
+      }
+    } catch (error) {
+      console.error('Error loading availability:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openManageModal = (date: string) => {
+    setSelectedDate(date);
+
+    // Get current availability for this date
+    const currentStates: {[key: string]: boolean} = {};
+
+    timeSlots.forEach(slot => {
+      const slotKey = `${slot.start}-${slot.end}`;
+
+      // Find if this slot exists in availability data
+      const existingSlot = availabilityData.find(item =>
+        item.date === date &&
+        item.start_time.substring(0, 5) === slot.start &&
+        item.end_time.substring(0, 5) === slot.end
+      );
+
+      // If slot exists, use its availability status
+      // If slot doesn't exist, default to available (false = available, true = off)
+      currentStates[slotKey] = existingSlot ? !existingSlot.is_available : false;
+    });
+
+    setSlotStates(currentStates);
+    setShowManageModal(true);
+  };
+
+  const saveSlotChanges = async () => {
+    if (!selectedDate) return;
+
+    setSaving(true);
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        alert('Authentication required');
+        return;
+      }
+
+      console.log('=== SAVING SLOTS ===');
+      console.log('Date:', selectedDate);
+      console.log('Slot states:', slotStates);
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      // Update each time slot
+      for (const slot of timeSlots) {
+        const slotKey = `${slot.start}-${slot.end}`;
+        const isOff = slotStates[slotKey] || false;
+        const isAvailable = !isOff; // Convert: checked = off, unchecked = available
+
+        console.log(`\nUpdating ${slot.label}:`);
+        console.log(`- Slot key: ${slotKey}`);
+        console.log(`- Is OFF: ${isOff}`);
+        console.log(`- Is Available: ${isAvailable}`);
+
+        const requestBody = {
+          date: selectedDate,
+          start_time: slot.start,
+          end_time: slot.end,
+          is_available: isAvailable
+        };
+
+        console.log('- Request body:', requestBody);
+
+        try {
+          const response = await fetch("http://localhost:8000/api/bookings/availability/", {
+            method: 'POST',
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(requestBody)
+          });
+
+          console.log(`- Response status: ${response.status}`);
+
+          if (response.ok) {
+            const result = await response.json();
+            console.log(`- Success:`, result);
+            successCount++;
+          } else {
+            const errorData = await response.json();
+            console.error(`- Error response:`, errorData);
+            errorCount++;
+          }
+        } catch (fetchError) {
+          console.error(`- Network error:`, fetchError);
+          errorCount++;
+        }
+      }
+
+      console.log(`\n=== RESULTS ===`);
+      console.log(`Success: ${successCount}, Errors: ${errorCount}`);
+
+      if (successCount > 0) {
+        // Close modal and refresh data
+        setShowManageModal(false);
+        setSlotStates({});
+        setSelectedDate('');
+
+        // Reload data to show changes
+        await loadAvailabilityData();
+
+        if (errorCount === 0) {
+          alert('✅ All slots updated successfully!');
+        } else {
+          alert(`⚠️ Partially updated: ${successCount} successful, ${errorCount} failed. Check console for details.`);
+        }
+      } else {
+        alert('❌ Failed to update any slots. Check console for error details.');
+      }
+
+    } catch (error) {
+      console.error('Critical error saving changes:', error);
+      alert('❌ Critical error occurred. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Helper function to get slot status for display
+  const getSlotStatus = (date: string, slot: any) => {
+    // Find existing slot in data
+    const existingSlot = availabilityData.find(item =>
+      item.date === date &&
+      item.start_time.substring(0, 5) === slot.start &&
+      item.end_time.substring(0, 5) === slot.end
+    );
+
+    // Check for bookings in this slot
+    const slotBookings = bookings.filter(booking => {
+      if (booking.date !== date) return false;
+      const bookingTime = booking.time.substring(0, 5);
+      return bookingTime >= slot.start && bookingTime < slot.end;
+    });
+
+    if (slotBookings.length > 0) {
+      return { type: 'booked', bookings: slotBookings };
+    } else if (existingSlot && existingSlot.is_available) {
+      return { type: 'available' };
+    } else {
+      return { type: 'off' };
+    }
+  };
+
+
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  const formatTime = (timeString: string) => {
+    return new Date(`2000-01-01T${timeString}`).toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+  };
+
+  if (loading) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        <div style={{ fontSize: '18px', color: '#666' }}>Loading availability data...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+      <div style={{
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        borderRadius: '20px',
+        padding: '30px',
+        color: 'white',
+        marginBottom: '30px'
+      }}>
+        <h2 style={{ margin: '0 0 20px 0', fontSize: '2rem', fontWeight: 700 }}>
+          📅 Availability Management
+        </h2>
+        <p style={{ opacity: 0.9, fontSize: '1.1rem', margin: '0 0 20px 0' }}>
+          Manage your working hours and off days to control when customers can book your services
+        </p>
+
+        {/* Quick Stats */}
+        <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+          <div style={{
+            background: 'rgba(255,255,255,0.2)',
+            padding: '15px 20px',
+            borderRadius: '10px',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>
+              {bookings.filter(b => ['pending', 'accepted'].includes(b.status)).length}
+            </div>
+            <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Upcoming Bookings</div>
+          </div>
+
+          <div style={{
+            background: 'rgba(255,255,255,0.2)',
+            padding: '15px 20px',
+            borderRadius: '10px',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>
+              {availabilityData.filter(s => s.is_available).length}
+            </div>
+            <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Available Slots</div>
+          </div>
+
+          <div style={{
+            background: 'rgba(255,255,255,0.2)',
+            padding: '15px 20px',
+            borderRadius: '10px',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>
+              {availabilityData.filter(s => !s.is_available).length}
+            </div>
+            <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Off Slots</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div style={{ display: 'flex', gap: '20px', marginBottom: '30px', flexWrap: 'wrap' }}>
+
+
+
+
+        <button
+          onClick={() => {
+            const today = new Date().toISOString().split('T')[0];
+            openManageModal(today);
+          }}
+          style={{
+            padding: '15px 25px',
+            borderRadius: '15px',
+            border: 'none',
+            background: 'linear-gradient(135deg, #ff9800 0%, #f57c00 100%)',
+            color: 'white',
+            fontSize: '16px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}
+        >
+          ⚙️ Manage Time Slots
+        </button>
+
+        <button
+          onClick={loadAvailabilityData}
+          style={{
+            padding: '15px 25px',
+            borderRadius: '15px',
+            border: 'none',
+            background: 'linear-gradient(135deg, #2196F3 0%, #1976D2 100%)',
+            color: 'white',
+            fontSize: '16px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}
+        >
+          🔄 Refresh
+        </button>
+
+
+
+
+      </div>
+
+      {/* Availability Slots */}
+      <div style={{ marginBottom: '40px' }}>
+        <h3 style={{ color: '#333', marginBottom: '20px', fontSize: '1.5rem' }}>
+          ⏰ Available Time Slots
+        </h3>
+
+        {availabilityData.length === 0 ? (
+          <div style={{
+            textAlign: 'center',
+            padding: '40px',
+            background: 'white',
+            borderRadius: '15px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '20px' }}>⏰</div>
+            <h4 style={{ color: '#666', marginBottom: '10px' }}>No availability slots set</h4>
+            <p style={{ color: '#999' }}>
+              Add your available time slots so customers know when they can book your services
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: '20px' }}>
+            {(() => {
+              // Group slots by date
+              const slotsByDate = availabilityData.reduce((acc, slot) => {
+                if (!acc[slot.date]) acc[slot.date] = [];
+                acc[slot.date].push(slot);
+                return acc;
+              }, {} as {[key: string]: any[]});
+
+              return Object.entries(slotsByDate)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .slice(0, 10) // Show only next 10 days
+                .map(([date, slots]) => (
+                  <div
+                    key={date}
+                    style={{
+                      background: 'white',
+                      borderRadius: '15px',
+                      padding: '20px',
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+                      border: '1px solid #f0f0f0'
+                    }}
+                  >
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '15px'
+                    }}>
+                      <div>
+                        <div style={{ fontSize: '1.2rem', fontWeight: 600, color: '#333', marginBottom: '5px' }}>
+                          📅 {formatDate(date)}
+                        </div>
+                        <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                          {new Date(date).toLocaleDateString('en-US', { weekday: 'long' })}
+                        </div>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          openManageModal(date);
+                        }}
+                        style={{
+                          padding: '8px 16px',
+                          borderRadius: '8px',
+                          border: '1px solid #667eea',
+                          background: 'white',
+                          color: '#667eea',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = '#667eea';
+                          e.currentTarget.style.color = 'white';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'white';
+                          e.currentTarget.style.color = '#667eea';
+                        }}
+                      >
+                        ⚙️ Manage
+                      </button>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+                      {timeSlots.map(timeSlot => {
+                        const status = getSlotStatus(date, timeSlot);
+
+                        let backgroundColor, borderColor, textColor, statusText;
+
+                        if (status.type === 'booked') {
+                          backgroundColor = '#e3f2fd';
+                          borderColor = '#2196F3';
+                          textColor = '#1976D2';
+                          statusText = `📅 ${status.bookings.length} Booking${status.bookings.length > 1 ? 's' : ''}`;
+                        } else if (status.type === 'available') {
+                          backgroundColor = '#e8f5e8';
+                          borderColor = '#4CAF50';
+                          textColor = '#4CAF50';
+                          statusText = '✅ Available';
+                        } else {
+                          backgroundColor = '#ffeaea';
+                          borderColor = '#f44336';
+                          textColor = '#f44336';
+                          statusText = '❌ Off';
+                        }
+
+                        return (
+                          <div
+                            key={`${timeSlot.start}-${timeSlot.end}`}
+                            style={{
+                              padding: '12px',
+                              borderRadius: '8px',
+                              background: backgroundColor,
+                              border: `1px solid ${borderColor}`,
+                              textAlign: 'center'
+                            }}
+                          >
+                            <div style={{
+                              fontSize: '0.9rem',
+                              fontWeight: 600,
+                              color: textColor,
+                              marginBottom: '4px'
+                            }}>
+                              {timeSlot.label}
+                            </div>
+                            <div style={{
+                              fontSize: '0.8rem',
+                              color: textColor,
+                              marginBottom: status.type === 'booked' ? '8px' : '0'
+                            }}>
+                              {statusText}
+                            </div>
+                            {status.type === 'booked' && (
+                              <div style={{ fontSize: '0.7rem', color: '#666' }}>
+                                {status.bookings.map((booking: any, idx: number) => (
+                                  <div key={idx} style={{ marginBottom: '2px' }}>
+                                    {booking.customer} - {booking.service}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ));
+            })()}
+          </div>
+        )}
+      </div>
+
+
+
+      {/* Manage Slots Modal */}
+      {showManageModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '20px',
+            padding: '30px',
+            maxWidth: '500px',
+            width: '90%'
+          }}>
+            <h3 style={{ marginBottom: '20px', color: '#333' }}>
+              ⚙️ Manage Time Slots for {formatDate(selectedDate)}
+            </h3>
+
+            <p style={{ color: '#666', marginBottom: '20px', fontSize: '14px' }}>
+              Check the boxes for time slots you want to mark as OFF. Unchecked slots will be available for booking.
+            </p>
+
+            <div style={{ marginBottom: '30px' }}>
+              <div style={{ display: 'grid', gap: '15px' }}>
+                {timeSlots.map(slot => {
+                  const slotKey = `${slot.start}-${slot.end}`;
+                  const isOff = slotStates[slotKey] || false;
+
+                  return (
+                    <div
+                      key={slotKey}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '15px',
+                        border: '1px solid #ddd',
+                        borderRadius: '10px',
+                        background: isOff ? '#ffeaea' : '#e8f5e8',
+                        transition: 'all 0.2s ease'
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        id={slotKey}
+                        checked={isOff}
+                        onChange={(e) => {
+                          setSlotStates(prev => ({
+                            ...prev,
+                            [slotKey]: e.target.checked
+                          }));
+                        }}
+                        style={{
+                          width: '18px',
+                          height: '18px',
+                          marginRight: '15px',
+                          cursor: 'pointer'
+                        }}
+                      />
+                      <label
+                        htmlFor={slotKey}
+                        style={{
+                          flex: 1,
+                          cursor: 'pointer',
+                          fontSize: '16px',
+                          fontWeight: 600,
+                          color: isOff ? '#f44336' : '#4CAF50'
+                        }}
+                      >
+                        {slot.label}
+                      </label>
+                      <div style={{
+                        padding: '4px 8px',
+                        borderRadius: '12px',
+                        background: isOff ? '#f44336' : '#4CAF50',
+                        color: 'white',
+                        fontSize: '12px',
+                        fontWeight: 600
+                      }}>
+                        {isOff ? '❌ OFF' : '✅ AVAILABLE'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={{
+              background: '#f8f9fa',
+              padding: '15px',
+              borderRadius: '10px',
+              marginBottom: '20px',
+              border: '1px solid #e9ecef'
+            }}>
+              <div style={{ fontSize: '14px', color: '#666', marginBottom: '8px' }}>
+                <strong>Summary:</strong>
+              </div>
+              <div style={{ fontSize: '14px', color: '#4CAF50' }}>
+                ✅ Available slots: {Object.values(slotStates).filter(state => !state).length}
+              </div>
+              <div style={{ fontSize: '14px', color: '#f44336' }}>
+                ❌ Off slots: {Object.values(slotStates).filter(state => state).length}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowManageModal(false);
+                  setSlotStates({});
+                }}
+                style={{
+                  padding: '12px 24px',
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  background: 'white',
+                  color: '#666',
+                  cursor: 'pointer',
+                  fontSize: '16px'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveSlotChanges}
+                disabled={saving}
+                style={{
+                  padding: '12px 24px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  background: saving ? '#ccc' : 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)',
+                  color: 'white',
+                  cursor: saving ? 'not-allowed' : 'pointer',
+                  fontSize: '16px',
+                  fontWeight: 600
+                }}
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
     </div>
   );
 }

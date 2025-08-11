@@ -130,3 +130,38 @@ class ProviderRating(models.Model):
 
     def __str__(self):
         return f"{self.customer.username} rated {self.provider.username}: {self.rating}/5"
+
+
+# Provider Availability System
+class ProviderAvailability(models.Model):
+    provider = models.ForeignKey('authentication.User', on_delete=models.CASCADE, related_name='availability_slots')
+    date = models.DateField()
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    is_available = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'provider_availability'
+        unique_together = ('provider', 'date', 'start_time', 'end_time')
+        ordering = ['date', 'start_time']
+
+    def __str__(self):
+        status = "Available" if self.is_available else "Unavailable"
+        return f"{self.provider.username} - {self.date} {self.start_time}-{self.end_time} ({status})"
+
+
+class ProviderOffDay(models.Model):
+    provider = models.ForeignKey('authentication.User', on_delete=models.CASCADE, related_name='off_days')
+    date = models.DateField()
+    reason = models.CharField(max_length=200, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'provider_off_days'
+        unique_together = ('provider', 'date')
+        ordering = ['date']
+
+    def __str__(self):
+        return f"{self.provider.username} - Off on {self.date}"

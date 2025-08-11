@@ -244,7 +244,7 @@ export default function BookingsPage() {
                         {formatDate(booking.service_date)}
                       </td>
                       <td style={{ padding: "16px", fontWeight: "600", color: "#28a745" }}>
-                        ₹{Number(booking.total_price).toFixed(2)}
+                        ${Number(booking.total_price).toFixed(2)}
                       </td>
                       <td style={{ padding: "16px", textAlign: "center" }}>
                         <span style={{

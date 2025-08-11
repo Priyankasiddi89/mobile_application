@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import ServiceCategory, ServiceSubcategory, Booking, ProviderRating
+from .models import ServiceCategory, ServiceSubcategory, Booking, ProviderRating, ProviderAvailability, ProviderOffDay
 from datetime import datetime
 from django.utils import timezone
 
@@ -95,4 +95,58 @@ class ProviderRatingCreateSerializer(serializers.Serializer):
     def validate_rating(self, value):
         if value < 1 or value > 5:
             raise serializers.ValidationError("Rating must be between 1 and 5")
+        return value
+
+
+class ProviderAvailabilitySerializer(serializers.Serializer):
+    id = serializers.SerializerMethodField()
+    provider = serializers.CharField(read_only=True)
+    date = serializers.DateField()
+    start_time = serializers.TimeField()
+    end_time = serializers.TimeField()
+    is_available = serializers.BooleanField()
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
+
+    def get_id(self, obj):
+        return str(obj.id)
+
+
+class ProviderAvailabilityCreateSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    start_time = serializers.TimeField()
+    end_time = serializers.TimeField()
+    is_available = serializers.BooleanField(default=True)
+
+    def validate(self, data):
+        if data['start_time'] >= data['end_time']:
+            raise serializers.ValidationError("Start time must be before end time")
+
+        # Ensure date is not in the past
+        from datetime import date
+        if data['date'] < date.today():
+            raise serializers.ValidationError("Cannot set availability for past dates")
+
+        return data
+
+
+class ProviderOffDaySerializer(serializers.Serializer):
+    id = serializers.SerializerMethodField()
+    provider = serializers.CharField(read_only=True)
+    date = serializers.DateField()
+    reason = serializers.CharField(required=False, allow_blank=True)
+    created_at = serializers.DateTimeField(read_only=True)
+
+    def get_id(self, obj):
+        return str(obj.id)
+
+
+class ProviderOffDayCreateSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    reason = serializers.CharField(required=False, allow_blank=True)
+
+    def validate_date(self, value):
+        from datetime import date
+        if value < date.today():
+            raise serializers.ValidationError("Cannot set off day for past dates")
         return value

@@ -51,9 +51,56 @@ class RegisterView(APIView):
         data['password'] = make_password(data['password'])
         serializer = UserSerializer(data=data)
         if serializer.is_valid():
-            serializer.save()
+            user = serializer.save()
+
+            # Create default availability for service providers
+            if user_type == 'Service Provider':
+                self.create_default_availability(user)
+
             return Response({'msg': 'User registered successfully'}, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def create_default_availability(self, user):
+        """Create default availability slots for new service providers"""
+        try:
+            from datetime import date, timedelta, time
+            from bookings.models import ProviderAvailability, ProviderOffDay
+
+            # Default time slots
+            default_slots = [
+                (time(9, 0), time(12, 0)),   # 9 AM - 12 PM
+                (time(12, 0), time(15, 0)),  # 12 PM - 3 PM
+                (time(15, 0), time(18, 0)),  # 3 PM - 6 PM
+                (time(18, 0), time(21, 0)),  # 6 PM - 9 PM
+            ]
+
+            start_date = date.today()
+            days_ahead = 30  # Create availability for next 30 days
+
+            for day_offset in range(days_ahead):
+                current_date = start_date + timedelta(days=day_offset)
+
+                # Check if it's Sunday (weekday 6)
+                if current_date.weekday() == 6:  # Sunday
+                    # Mark Sunday as off day
+                    ProviderOffDay.objects.get_or_create(
+                        provider=user,
+                        date=current_date,
+                        defaults={'reason': 'Default Sunday off'}
+                    )
+                else:
+                    # Create availability slots for non-Sunday days
+                    for start_time, end_time in default_slots:
+                        ProviderAvailability.objects.get_or_create(
+                            provider=user,
+                            date=current_date,
+                            start_time=start_time,
+                            end_time=end_time,
+                            defaults={'is_available': True}
+                        )
+        except Exception as e:
+            # Log error but don't fail registration
+            print(f"Error creating default availability for {user.username}: {e}")
 
 class LoginView(APIView):
     def post(self, request):

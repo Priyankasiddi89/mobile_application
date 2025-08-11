@@ -44,6 +44,8 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
   const [step, setStep] = useState<'providers' | 'booking'>('providers');
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'rating'>('rating');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [availableSlots, setAvailableSlots] = useState<any[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
 
   const timeSlots = [
     "09:00", "10:00", "11:00", "12:00", "13:00", 
@@ -93,6 +95,10 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
   const handleProviderSelect = (provider: Provider) => {
     setSelectedProvider(provider);
     setStep('booking');
+    // Reset date and time when switching providers
+    setSelectedDate("");
+    setSelectedTime("");
+    setAvailableSlots([]);
   };
 
   const handleBackToProviders = () => {
@@ -167,6 +173,41 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
     return sorted;
   };
 
+  const fetchAvailableSlots = async (providerId: string, date: string) => {
+    if (!providerId || !date) return;
+
+    setLoadingSlots(true);
+    try {
+      console.log(`Fetching available slots for provider ${providerId} on ${date}`);
+      const response = await fetch(`http://localhost:8000/api/bookings/provider/${providerId}/available-slots/?date=${date}`);
+
+      console.log(`Response status: ${response.status}`);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Available slots response:', data);
+        setAvailableSlots(data.available_slots || []);
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Failed to fetch available slots:', response.status, errorData);
+        setAvailableSlots([]);
+      }
+    } catch (error) {
+      console.error('Error fetching available slots:', error);
+      setAvailableSlots([]);
+    } finally {
+      setLoadingSlots(false);
+    }
+  };
+
+  const handleDateChange = (date: string) => {
+    setSelectedDate(date);
+    setSelectedTime(""); // Reset time when date changes
+    if (selectedProvider && date) {
+      fetchAvailableSlots(selectedProvider.provider_id, date);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDate || !selectedTime) {
@@ -211,14 +252,25 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
         }),
       });
 
+      console.log('Booking request:', {
+        provider_id: selectedProvider.provider_id,
+        service_id: parseInt(subcategory.id),
+        service_date: serviceDateTime.toISOString(),
+        notes: notes,
+        address: address,
+      });
+      console.log('Response status:', response.status);
+
       if (response.ok) {
         const data = await response.json();
-        alert(`✅ Booking request sent to ${selectedProvider.provider_name}!\n\n💰 Total: ₹${selectedProvider.provider_price}\n📅 Date: ${selectedDate} at ${selectedTime}\n\nThe provider will review your request and respond soon. You can check the status in "My Requests" section.`);
+        console.log('Booking success:', data);
+        alert(`✅ Booking request sent to ${selectedProvider.provider_name}!\n\n💰 Total: $${selectedProvider.provider_price}\n📅 Date: ${selectedDate} at ${selectedTime}\n\nThe provider will review your request and respond soon. You can check the status in "My Requests" section.`);
         onClose();
         resetForm();
       } else {
-        const errorData = await response.json();
-        setError(errorData.error || "Failed to create booking");
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Booking error:', response.status, errorData);
+        setError(errorData.error || `Failed to create booking (${response.status})`);
       }
     } catch (err) {
       setError("Network error. Please try again.");
@@ -492,7 +544,7 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
                             borderRadius: '8px',
                             fontWeight: '600'
                           }}>
-                            ₹{provider.provider_price}
+                            ${provider.provider_price}
                           </div>
                           {/* Price difference hidden from end users */}
                         </div>
@@ -550,7 +602,7 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
                       {selectedProvider.provider_name}
                     </h4>
                     <div style={{ fontSize: '14px', color: '#155724' }}>
-                      Total: ₹{selectedProvider.provider_price}
+                      Total: ${selectedProvider.provider_price}
                     </div>
                   </div>
                   <button
@@ -584,7 +636,7 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
                 <input
                   type="date"
                   value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
+                  onChange={(e) => handleDateChange(e.target.value)}
                   min={today}
                   required
                   style={{
@@ -606,25 +658,67 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
                 }}>
                   Service Time *
                 </label>
-                <select
-                  value={selectedTime}
-                  onChange={(e) => setSelectedTime(e.target.value)}
-                  required
-                  style={{
-                    width: "100%",
+
+                {loadingSlots ? (
+                  <div style={{
                     padding: "12px",
                     border: "1px solid #ddd",
                     borderRadius: "8px",
-                    fontSize: "16px",
-                  }}
-                >
-                  <option value="">Select a time</option>
-                  {timeSlots.map((time) => (
-                    <option key={time} value={time}>
-                      {time}
+                    textAlign: "center",
+                    color: "#666"
+                  }}>
+                    ⏳ Loading available time slots...
+                  </div>
+                ) : selectedDate && availableSlots.length === 0 ? (
+                  <div style={{
+                    padding: "12px",
+                    border: "1px solid #ffeb3b",
+                    borderRadius: "8px",
+                    background: "#fffde7",
+                    color: "#f57f17",
+                    textAlign: "center"
+                  }}>
+                    ⚠️ No available time slots for this date. Provider may be off or fully booked.
+                  </div>
+                ) : (
+                  <select
+                    value={selectedTime}
+                    onChange={(e) => setSelectedTime(e.target.value)}
+                    required
+                    disabled={!selectedDate || availableSlots.length === 0}
+                    style={{
+                      width: "100%",
+                      padding: "12px",
+                      border: "1px solid #ddd",
+                      borderRadius: "8px",
+                      fontSize: "16px",
+                      backgroundColor: (!selectedDate || availableSlots.length === 0) ? "#f5f5f5" : "white",
+                      cursor: (!selectedDate || availableSlots.length === 0) ? "not-allowed" : "pointer"
+                    }}
+                  >
+                    <option value="">
+                      {!selectedDate ? "Please select a date first" : "Select an available time"}
                     </option>
-                  ))}
-                </select>
+                    {availableSlots.map((slot, index) => (
+                      <option key={index} value={slot.start_time}>
+                        {slot.display_time}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {selectedDate && availableSlots.length > 0 && (
+                  <div style={{
+                    marginTop: "8px",
+                    fontSize: "12px",
+                    color: "#4CAF50",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "5px"
+                  }}>
+                    ✅ {availableSlots.length} time slot{availableSlots.length !== 1 ? 's' : ''} available
+                  </div>
+                )}
               </div>
 
               <div style={{ marginBottom: "20px" }}>
