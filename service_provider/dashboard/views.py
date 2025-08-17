@@ -44,7 +44,7 @@ class ProviderProfileView(APIView):
                 'completed_bookings': completed_bookings,
                 'active_bookings': active_bookings,
                 'total_earnings': float(total_earnings),
-                'completion_rate': round((completed_bookings / total_bookings * 100) if total_bookings > 0 else 0, 2)
+                'completion_rate': round((completed_bookings / (completed_bookings + active_bookings) * 100) if (completed_bookings + active_bookings) > 0 else (100.0 if completed_bookings > 0 else 0.0), 2)
             }
         })
 
@@ -476,8 +476,17 @@ class ProviderDashboardStatsView(APIView):
 
         total_earnings = sum([float(booking.total_price) if booking.total_price is not None else 0.0 for booking in Booking.objects.filter(provider=user.username, status='completed')])
 
-        # Calculate completion rate
-        completion_rate = round((completed_bookings / total_bookings * 100) if total_bookings > 0 else 0, 2)
+        # Calculate completion rate (only consider completed + active bookings)
+        # Pending requests and cancelled bookings should not affect completion rate
+        relevant_bookings = completed_bookings + active_bookings
+        if relevant_bookings > 0:
+            completion_rate = round((completed_bookings / relevant_bookings * 100), 2)
+        elif completed_bookings > 0:
+            # If there are completed bookings but no active ones, it's 100%
+            completion_rate = 100.0
+        else:
+            # No relevant bookings at all
+            completion_rate = 0.0
 
         return Response({
             'total_bookings': total_bookings,

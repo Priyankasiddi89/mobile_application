@@ -149,8 +149,16 @@ def get_provider_dashboard_stats(request):
         weekly_earnings = weekly_bookings.aggregate(total=Sum('total_price'))['total'] or 0
         weekly_completed_jobs = weekly_bookings.count()
         
-        # Calculate completion rate (only for assigned bookings)
-        completion_rate = round((completed_bookings / assigned_bookings_count * 100) if assigned_bookings_count > 0 else 0, 2)
+        # Calculate completion rate (only consider completed + active bookings)
+        relevant_bookings = completed_bookings + active_bookings
+        if relevant_bookings > 0:
+            completion_rate = round((completed_bookings / relevant_bookings * 100), 2)
+        elif completed_bookings > 0:
+            # If there are completed bookings but no active ones, it's 100%
+            completion_rate = 100.0
+        else:
+            # No relevant bookings at all
+            completion_rate = 0.0
         
         # Get earnings by service
         earnings_by_service = provider_bookings.filter(

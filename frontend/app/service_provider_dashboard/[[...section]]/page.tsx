@@ -3172,10 +3172,15 @@ function ProviderRatings({ user }: { user: User }) {
 function AvailabilityManagement({ user }: { user: User }) {
   const [availabilityData, setAvailabilityData] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
+  const [offDays, setOffDays] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showManageModal, setShowManageModal] = useState(false);
+  const [showOffDayModal, setShowOffDayModal] = useState(false);
+  const [showOffDaysViewModal, setShowOffDaysViewModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
   const [slotStates, setSlotStates] = useState<{[key: string]: boolean}>({});
+  const [selectedOffDays, setSelectedOffDays] = useState<string[]>([]);
+  const [offDayReason, setOffDayReason] = useState('');
   const [saving, setSaving] = useState(false);
 
   // Default time slots - these are the 4 standard slots
@@ -3196,14 +3201,25 @@ function AvailabilityManagement({ user }: { user: User }) {
       const token = localStorage.getItem("access_token");
       if (!token) return;
 
-      const response = await fetch("http://localhost:8000/api/bookings/availability/", {
+      // Load availability slots
+      const availabilityResponse = await fetch("http://localhost:8000/api/bookings/availability/", {
         headers: { "Authorization": `Bearer ${token}` }
       });
 
-      if (response.ok) {
-        const data = await response.json();
+      // Load off days
+      const offDaysResponse = await fetch("http://localhost:8000/api/bookings/off-days/", {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+
+      if (availabilityResponse.ok) {
+        const data = await availabilityResponse.json();
         setAvailabilityData(data.availability_slots || []);
         setBookings(data.bookings || []);
+      }
+
+      if (offDaysResponse.ok) {
+        const offDaysData = await offDaysResponse.json();
+        setOffDays(offDaysData.off_days || []);
       }
     } catch (error) {
       console.error('Error loading availability:', error);
@@ -3333,6 +3349,12 @@ function AvailabilityManagement({ user }: { user: User }) {
 
   // Helper function to get slot status for display
   const getSlotStatus = (date: string, slot: any) => {
+    // Check if this date is marked as off day
+    const isOffDay = offDays.some(offDay => offDay.date === date);
+    if (isOffDay) {
+      return { type: 'off_day', reason: offDays.find(od => od.date === date)?.reason };
+    }
+
     // Find existing slot in data
     const existingSlot = availabilityData.find(item =>
       item.date === date &&
@@ -3353,6 +3375,103 @@ function AvailabilityManagement({ user }: { user: User }) {
       return { type: 'available' };
     } else {
       return { type: 'off' };
+    }
+  };
+
+  // Open off day calendar modal
+  const openOffDayModal = () => {
+    setSelectedOffDays([]);
+    setOffDayReason('');
+    setShowOffDayModal(true);
+  };
+
+  // Open off days view modal
+  const openOffDaysViewModal = () => {
+    setShowOffDaysViewModal(true);
+  };
+
+  // Get upcoming off days and off slots
+  const getUpcomingOffDaysAndSlots = () => {
+    const today = new Date();
+    const next30Days = new Date();
+    next30Days.setDate(today.getDate() + 30);
+
+    // Get off days in next 30 days
+    const upcomingOffDays = offDays.filter(offDay => {
+      const offDate = new Date(offDay.date);
+      return offDate >= today && offDate <= next30Days;
+    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    // Get off slots in next 30 days
+    const upcomingOffSlots = availabilityData.filter(slot => {
+      const slotDate = new Date(slot.date);
+      return slotDate >= today && slotDate <= next30Days && !slot.is_available;
+    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    return { upcomingOffDays, upcomingOffSlots };
+  };
+
+  // Save selected off days
+  const saveOffDays = async () => {
+    if (selectedOffDays.length === 0) {
+      alert('Please select at least one date');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        alert('Authentication required');
+        return;
+      }
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const date of selectedOffDays) {
+        try {
+          const response = await fetch("http://localhost:8000/api/bookings/off-days/", {
+            method: 'POST',
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              date: date,
+              reason: offDayReason || 'Off day'
+            })
+          });
+
+          if (response.ok) {
+            successCount++;
+          } else {
+            errorCount++;
+          }
+        } catch (error) {
+          errorCount++;
+        }
+      }
+
+      if (successCount > 0) {
+        setShowOffDayModal(false);
+        setSelectedOffDays([]);
+        setOffDayReason('');
+        await loadAvailabilityData();
+
+        if (errorCount === 0) {
+          alert(`✅ Successfully marked ${successCount} day(s) as off!`);
+        } else {
+          alert(`⚠️ Marked ${successCount} day(s) as off, ${errorCount} failed.`);
+        }
+      } else {
+        alert('❌ Failed to mark any days as off. Please try again.');
+      }
+    } catch (error) {
+      console.error('Error saving off days:', error);
+      alert('❌ Failed to save off days');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -3445,15 +3564,12 @@ function AvailabilityManagement({ user }: { user: User }) {
 
 
         <button
-          onClick={() => {
-            const today = new Date().toISOString().split('T')[0];
-            openManageModal(today);
-          }}
+          onClick={openOffDaysViewModal}
           style={{
             padding: '15px 25px',
             borderRadius: '15px',
             border: 'none',
-            background: 'linear-gradient(135deg, #ff9800 0%, #f57c00 100%)',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             color: 'white',
             fontSize: '16px',
             fontWeight: 600,
@@ -3464,7 +3580,27 @@ function AvailabilityManagement({ user }: { user: User }) {
             gap: '10px'
           }}
         >
-          ⚙️ Manage Time Slots
+          👁️ View Off Days & Slots
+        </button>
+
+        <button
+          onClick={openOffDayModal}
+          style={{
+            padding: '15px 25px',
+            borderRadius: '15px',
+            border: 'none',
+            background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+            color: 'white',
+            fontSize: '16px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}
+        >
+          📅 Mark Off Days
         </button>
 
         <button
@@ -3586,7 +3722,12 @@ function AvailabilityManagement({ user }: { user: User }) {
 
                         let backgroundColor, borderColor, textColor, statusText;
 
-                        if (status.type === 'booked') {
+                        if (status.type === 'off_day') {
+                          backgroundColor = '#fff3e0';
+                          borderColor = '#ff9800';
+                          textColor = '#f57c00';
+                          statusText = `🚫 Off Day${status.reason ? ` - ${status.reason}` : ''}`;
+                        } else if (status.type === 'booked') {
                           backgroundColor = '#e3f2fd';
                           borderColor = '#2196F3';
                           textColor = '#1976D2';
@@ -3801,6 +3942,338 @@ function AvailabilityManagement({ user }: { user: User }) {
         </div>
       )}
 
+      {/* Off Day Calendar Modal */}
+      {showOffDayModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '20px',
+            padding: '30px',
+            maxWidth: '600px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflowY: 'auto'
+          }}>
+            <h3 style={{ marginBottom: '20px', color: '#333' }}>
+              📅 Mark Off Days
+            </h3>
+
+            <p style={{ color: '#666', marginBottom: '20px', fontSize: '14px' }}>
+              Select multiple dates to mark as off days. You can select individual dates or date ranges.
+            </p>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
+                Select Dates *
+              </label>
+              <input
+                type="date"
+                min={new Date().toISOString().split('T')[0]}
+                onChange={(e) => {
+                  const selectedDate = e.target.value;
+                  if (selectedDate && !selectedOffDays.includes(selectedDate)) {
+                    setSelectedOffDays(prev => [...prev, selectedDate].sort());
+                  }
+                }}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  marginBottom: '10px'
+                }}
+              />
+
+              {/* Selected dates display */}
+              {selectedOffDays.length > 0 && (
+                <div style={{
+                  background: '#f8f9fa',
+                  padding: '15px',
+                  borderRadius: '8px',
+                  border: '1px solid #e9ecef'
+                }}>
+                  <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '10px' }}>
+                    Selected Dates ({selectedOffDays.length}):
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {selectedOffDays.map(date => (
+                      <div
+                        key={date}
+                        style={{
+                          background: '#f093fb',
+                          color: 'white',
+                          padding: '4px 8px',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '5px'
+                        }}
+                      >
+                        {formatDate(date)}
+                        <button
+                          onClick={() => setSelectedOffDays(prev => prev.filter(d => d !== date))}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            padding: '0',
+                            marginLeft: '3px'
+                          }}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginBottom: '30px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>
+                Reason (Optional)
+              </label>
+              <input
+                type="text"
+                value={offDayReason}
+                onChange={(e) => setOffDayReason(e.target.value)}
+                placeholder="e.g., Personal leave, Holiday, Vacation..."
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  fontSize: '16px'
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setShowOffDayModal(false);
+                  setSelectedOffDays([]);
+                  setOffDayReason('');
+                }}
+                style={{
+                  padding: '12px 24px',
+                  border: '1px solid #ddd',
+                  borderRadius: '8px',
+                  background: 'white',
+                  color: '#666',
+                  cursor: 'pointer',
+                  fontSize: '16px'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveOffDays}
+                disabled={saving || selectedOffDays.length === 0}
+                style={{
+                  padding: '12px 24px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  background: saving || selectedOffDays.length === 0 ? '#ccc' : 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                  color: 'white',
+                  cursor: saving || selectedOffDays.length === 0 ? 'not-allowed' : 'pointer',
+                  fontSize: '16px',
+                  fontWeight: 600
+                }}
+              >
+                {saving ? 'Saving...' : `Mark ${selectedOffDays.length} Day${selectedOffDays.length !== 1 ? 's' : ''} Off`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Off Days View Modal */}
+      {showOffDaysViewModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '20px',
+            padding: '30px',
+            maxWidth: '700px',
+            width: '90%',
+            maxHeight: '80vh',
+            overflowY: 'auto'
+          }}>
+            <h3 style={{ marginBottom: '20px', color: '#333' }}>
+              👁️ Upcoming Off Days & Time Slots
+            </h3>
+
+            <p style={{ color: '#666', marginBottom: '20px', fontSize: '14px' }}>
+              View your upcoming off days and off time slots for the next 30 days.
+            </p>
+
+            {(() => {
+              const { upcomingOffDays, upcomingOffSlots } = getUpcomingOffDaysAndSlots();
+
+              return (
+                <div>
+                  {/* Off Days Section */}
+                  <div style={{ marginBottom: '30px' }}>
+                    <h4 style={{ color: '#333', marginBottom: '15px', fontSize: '1.2rem' }}>
+                      🚫 Full Off Days ({upcomingOffDays.length})
+                    </h4>
+
+                    {upcomingOffDays.length === 0 ? (
+                      <div style={{
+                        textAlign: 'center',
+                        padding: '20px',
+                        background: '#f8f9fa',
+                        borderRadius: '10px',
+                        color: '#666'
+                      }}>
+                        No full off days scheduled in the next 30 days
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gap: '10px' }}>
+                        {upcomingOffDays.map((offDay, index) => (
+                          <div
+                            key={index}
+                            style={{
+                              background: '#fff3e0',
+                              border: '1px solid #ff9800',
+                              borderRadius: '10px',
+                              padding: '15px',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontWeight: 600, color: '#f57c00', marginBottom: '5px' }}>
+                                📅 {formatDate(offDay.date)}
+                              </div>
+                              {offDay.reason && (
+                                <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                                  📝 {offDay.reason}
+                                </div>
+                              )}
+                            </div>
+                            <div style={{
+                              background: '#ff9800',
+                              color: 'white',
+                              padding: '4px 8px',
+                              borderRadius: '12px',
+                              fontSize: '0.8rem',
+                              fontWeight: 600
+                            }}>
+                              Full Day Off
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Off Time Slots Section */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <h4 style={{ color: '#333', marginBottom: '15px', fontSize: '1.2rem' }}>
+                      ⏰ Off Time Slots ({upcomingOffSlots.length})
+                    </h4>
+
+                    {upcomingOffSlots.length === 0 ? (
+                      <div style={{
+                        textAlign: 'center',
+                        padding: '20px',
+                        background: '#f8f9fa',
+                        borderRadius: '10px',
+                        color: '#666'
+                      }}>
+                        No off time slots scheduled in the next 30 days
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gap: '10px' }}>
+                        {upcomingOffSlots.map((slot, index) => (
+                          <div
+                            key={index}
+                            style={{
+                              background: '#ffeaea',
+                              border: '1px solid #f44336',
+                              borderRadius: '10px',
+                              padding: '15px',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontWeight: 600, color: '#f44336', marginBottom: '5px' }}>
+                                📅 {formatDate(slot.date)}
+                              </div>
+                              <div style={{ color: '#666', fontSize: '0.9rem' }}>
+                                ⏰ {slot.start_time.substring(0, 5)} - {slot.end_time.substring(0, 5)}
+                              </div>
+                            </div>
+                            <div style={{
+                              background: '#f44336',
+                              color: 'white',
+                              padding: '4px 8px',
+                              borderRadius: '12px',
+                              fontSize: '0.8rem',
+                              fontWeight: 600
+                            }}>
+                              Time Slot Off
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
+              <button
+                onClick={() => setShowOffDaysViewModal(false)}
+                style={{
+                  padding: '12px 24px',
+                  border: 'none',
+                  borderRadius: '8px',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  fontWeight: 600
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
