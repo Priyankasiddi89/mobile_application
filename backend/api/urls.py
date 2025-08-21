@@ -7,7 +7,7 @@ from django.urls import path
 # Import views directly to avoid circular imports
 from .auth import (
     register_user, login_user, logout_user, get_current_user,
-    update_user_profile, get_all_users
+    update_user_profile, get_all_users, get_user_profile
 )
 from .services import (
     get_service_categories, get_service_subcategories, get_services_by_category,
@@ -17,8 +17,9 @@ from .services import (
 from .bookings import (
     create_booking, get_user_bookings, get_provider_bookings, get_provider_requests,
     update_booking_status, accept_booking_request, decline_booking_request, complete_booking,
-    cancel_booking_request, create_provider_rating, get_provider_ratings,
-    manage_provider_availability, manage_provider_off_days, get_provider_available_slots
+    cancel_booking_request, delete_booking_request, create_provider_rating, get_provider_ratings,
+    manage_provider_availability, manage_provider_off_days, get_provider_available_slots,
+    get_user_permissions
 )
 from .analytics import (
     get_customer_dashboard_stats, get_provider_dashboard_stats,
@@ -29,12 +30,19 @@ from .marketplace import (
     rate_provider, get_provider_profile, update_service_availability
 )
 
+# Import platform provider dashboard views
+from platform_provider_dashboard.views import (
+    admin_profile, users_management, services_management, analytics,
+    get_permissions, get_user_type_role_permissions, update_user_type_role_permissions
+)
+
 urlpatterns = [
     # Authentication API endpoints
     path('auth/register/', register_user, name='api_register'),
     path('auth/login/', login_user, name='api_login'),
     path('auth/logout/', logout_user, name='api_logout'),
     path('auth/me/', get_current_user, name='api_current_user'),
+    path('auth/profile/', get_user_profile, name='api_user_profile'),
     path('auth/me/update/', update_user_profile, name='api_update_profile'),
     path('auth/users/', get_all_users, name='api_all_users'),
 
@@ -57,7 +65,9 @@ urlpatterns = [
     path('bookings/<int:booking_id>/decline/', decline_booking_request, name='api_decline_booking'),
     path('bookings/<int:booking_id>/complete/', complete_booking, name='api_complete_booking'),
     path('bookings/<int:booking_id>/cancel/', cancel_booking_request, name='api_cancel_booking'),
+    path('bookings/<int:booking_id>/delete/', delete_booking_request, name='api_delete_booking'),
     path('bookings/rate-provider/', create_provider_rating, name='api_create_rating'),
+    path('user/permissions/', get_user_permissions, name='api_get_user_permissions'),
     path('bookings/provider/<int:provider_id>/ratings/', get_provider_ratings, name='api_provider_ratings'),
     path('bookings/availability/', manage_provider_availability, name='api_provider_availability'),
     path('bookings/off-days/', manage_provider_off_days, name='api_provider_off_days'),
@@ -76,4 +86,13 @@ urlpatterns = [
     path('marketplace/rate-provider/', rate_provider, name='api_rate_provider'),
     path('marketplace/provider/<int:provider_id>/profile/', get_provider_profile, name='api_get_provider_profile'),
     path('marketplace/service-registration/<int:service_registration_id>/', update_service_availability, name='api_update_service_availability'),
+
+    # Platform Provider Dashboard API endpoints
+    path('platform_provider_dashboard/profile/', admin_profile, name='api_admin_profile'),
+    path('platform_provider_dashboard/users/', users_management, name='api_users_management'),
+    path('platform_provider_dashboard/services/', services_management, name='api_services_management'),
+    path('platform_provider_dashboard/analytics/', analytics, name='api_analytics'),
+    path('platform_provider_dashboard/permissions/', get_permissions, name='api_get_permissions'),
+    path('platform_provider_dashboard/user-type-role-permissions/', get_user_type_role_permissions, name='api_get_user_type_role_permissions'),
+    path('platform_provider_dashboard/update-permissions/', update_user_type_role_permissions, name='api_update_user_type_role_permissions'),
 ]

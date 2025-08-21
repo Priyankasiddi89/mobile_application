@@ -12,6 +12,38 @@ interface User {
   is_active: boolean;
 }
 
+interface UserPermissions {
+  [key: string]: boolean;
+}
+
+function PermissionDenied({ section, permission }: { section: string; permission: string }) {
+  return (
+    <div style={{
+      background: 'white',
+      borderRadius: 16,
+      padding: 40,
+      maxWidth: 600,
+      margin: '40px auto',
+      boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)',
+      textAlign: 'center'
+    }}>
+      <div style={{ fontSize: '64px', marginBottom: 20 }}>🔒</div>
+      <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 16, color: '#dc3545' }}>
+        Access Denied
+      </h2>
+      <p style={{ color: '#6c757d', marginBottom: 20 }}>
+        You don't have permission to access <strong>{section}</strong>.
+      </p>
+      <p style={{ color: '#6c757d', fontSize: '0.9rem' }}>
+        Required permission: <strong>{permission}</strong>
+      </p>
+      <p style={{ color: '#6c757d', fontSize: '0.9rem', marginTop: 20 }}>
+        Contact your administrator to request access.
+      </p>
+    </div>
+  );
+}
+
 interface Service {
   id: number;
   name: string;
@@ -31,29 +63,40 @@ interface Booking {
   price: number;
 }
 
-function EndUserSidebar({ user }: { user: User }) {
+function EndUserSidebar({ user, hasPermission, permissionsLoading }: { user: User; hasPermission: (permission: string) => boolean; permissionsLoading: boolean }) {
   const router = useRouter();
   const params = useParams();
   const section = Array.isArray(params.section) ? params.section[0] : params.section;
   const currentPath = section ? `/end_user_dashboard/${section}` : '/end_user_dashboard';
 
-  const menuItems = [
+  const allMenuItems = [
     {
       title: "Home",
       path: "/end_user_dashboard",
-      icon: "🏠"
+      icon: "🏠",
+      permission: null // Home is always accessible
     },
     {
       title: "Book a Service",
       path: "/end_user_dashboard/services",
-      icon: "🔧"
+      icon: "🔧",
+      permission: "create_bookings"
     },
     {
       title: "My Requests",
       path: "/end_user_dashboard/requests",
-      icon: "📝"
+      icon: "📝",
+      permission: "view_own_bookings"
     }
   ];
+
+  // Filter menu items based on permissions
+  // If permissions haven't loaded yet, show all items to prevent empty menu
+  const menuItems = permissionsLoading ? allMenuItems : allMenuItems.filter(item =>
+    item.permission === null || hasPermission(item.permission)
+  );
+
+  console.log('🎯 Menu items after filtering:', menuItems.map(item => item.title));
 
   return (
     <div style={{
@@ -86,32 +129,43 @@ function EndUserSidebar({ user }: { user: User }) {
           👤
         </div>
         <p style={{ color: 'rgba(255,255,255,0.8)', margin: '0 0 8px 0', fontSize: '0.8rem', fontWeight: 500 }}>{user.username}</p>
-        <div 
-          onClick={() => router.push('/end_user_dashboard/profile')}
-          style={{ 
-            cursor: 'pointer',
-            transition: 'all 0.3s ease',
-            padding: '4px 8px',
-            borderRadius: '4px',
+        {hasPermission('view_own_profile') && (
+          <div
+            onClick={() => router.push('/end_user_dashboard/profile')}
+            style={{
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              margin: '8px 0',
+              textAlign: 'center'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(135, 206, 235, 0.2)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+            }}
+          >
+            <p style={{
+              color: '#87CEEB',
+              margin: 0,
+              fontSize: '0.9rem',
+              fontWeight: 500,
+              textDecoration: 'underline',
+              textAlign: 'center'
+            }}>My Profile</p>
+          </div>
+        )}
+        {!hasPermission('view_own_profile') && (
+          <p style={{
+            color: 'rgba(255,255,255,0.5)',
             margin: '8px 0',
-            textAlign: 'center'
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = 'rgba(135, 206, 235, 0.2)';
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = 'transparent';
-          }}
-        >
-          <p style={{ 
-            color: '#87CEEB', 
-            margin: 0, 
-            fontSize: '0.9rem', 
-            fontWeight: 500, 
-            textDecoration: 'underline',
-            textAlign: 'center'
-          }}>My Profile</p>
-        </div>
+            fontSize: '0.8rem',
+            textAlign: 'center',
+            fontStyle: 'italic'
+          }}>Profile access restricted</p>
+        )}
       </div>
 
 
@@ -208,9 +262,91 @@ function EndUserSidebar({ user }: { user: User }) {
 export default function UserDashboardCatchAll() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userPermissions, setUserPermissions] = useState<UserPermissions>({});
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
   const router = useRouter();
   const params = useParams();
   const section = Array.isArray(params.section) ? params.section[0] : params.section;
+
+  // Function to load user permissions
+  const loadUserPermissions = async (userType: string, role: string) => {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      console.log('❌ No token found, skipping permission loading');
+      setPermissionsLoading(false);
+      return;
+    }
+
+    // Set a timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      console.log('⏰ Permission loading timeout - setting default permissions');
+      setUserPermissions({});
+      setPermissionsLoading(false);
+    }, 10000); // 10 second timeout
+
+    try {
+      console.log('🔐 Loading user permissions for:', userType, role);
+      const response = await fetch("http://localhost:8000/api/user/permissions/", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      console.log('🌐 API Response status:', response.status);
+      console.log('🌐 API Response ok:', response.ok);
+
+      if (response.ok) {
+        const permissionData = await response.json();
+        console.log('📦 Raw API response:', permissionData);
+
+        const flatPermissions = permissionData.flat_permissions || {};
+        console.log('🎯 Flat permissions:', flatPermissions);
+
+        console.log('✅ User permissions loaded:', flatPermissions);
+        setUserPermissions(flatPermissions);
+      } else {
+        console.error('❌ Failed to load permissions - Status:', response.status);
+        const errorText = await response.text();
+        console.error('❌ Error response:', errorText);
+
+        // Set default permissions for End Users if API fails
+        console.log('🔄 Setting fallback permissions for End User');
+        const fallbackPermissions = {
+          'view_own_profile': true,
+          'edit_own_profile': true,
+          'view_own_bookings': true,
+          'create_bookings': true,
+          'cancel_bookings': true,
+          'delete_bookings': true
+        };
+        setUserPermissions(fallbackPermissions);
+      }
+    } catch (error) {
+      console.error('💥 Error loading permissions:', error);
+
+      // Set default permissions for End Users if there's an error
+      console.log('🔄 Setting fallback permissions due to error');
+      const fallbackPermissions = {
+        'view_own_profile': true,
+        'edit_own_profile': true,
+        'view_own_bookings': true,
+        'create_bookings': true,
+        'cancel_bookings': true,
+        'delete_bookings': true
+      };
+      setUserPermissions(fallbackPermissions);
+    } finally {
+      clearTimeout(timeoutId);
+      setPermissionsLoading(false);
+    }
+  };
+
+  // Function to check if user has a specific permission
+  const hasPermission = (permissionCode: string): boolean => {
+    console.log(`🔍 Checking permission: ${permissionCode}`);
+    console.log(`📋 Available permissions:`, userPermissions);
+    console.log(`✅ Has permission: ${userPermissions[permissionCode] === true}`);
+
+    return userPermissions[permissionCode] === true;
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
@@ -234,18 +370,23 @@ export default function UserDashboardCatchAll() {
         }
         setUser(data);
         setLoading(false);
+
+        // Load user permissions after user data is loaded
+        loadUserPermissions(data.user_type, data.role);
       })
       .catch(() => {
         router.push("/login");
       });
   }, [router]);
 
-  if (loading) {
+  if (loading || permissionsLoading) {
     return (
       <div style={{ textAlign: "center", marginTop: "50px", background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <div style={{ background: "white", padding: "40px", borderRadius: "16px", boxShadow: "0 20px 40px rgba(0,0,0,0.1)" }}>
           <div style={{ fontSize: "48px", marginBottom: "16px" }}>⏳</div>
-          <h3 style={{ margin: "0", color: "#333" }}>Loading your dashboard...</h3>
+          <h3 style={{ margin: "0", color: "#333" }}>
+            {loading ? "Loading your dashboard..." : "Loading permissions..."}
+          </h3>
         </div>
       </div>
     );
@@ -254,22 +395,42 @@ export default function UserDashboardCatchAll() {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
-      <EndUserSidebar user={user} />
+      <EndUserSidebar user={user} hasPermission={hasPermission} permissionsLoading={permissionsLoading} />
       <main style={{ flex: 1, padding: "32px", background: "#f8f9fa", marginLeft: "280px" }}>
         {/* Home page for end users */}
         {!section && <MainDashboard user={user} />}
         
         {/* Profile section route */}
-        {section === "profile" && <ProfileSection user={user} />}
-        
-        {/* Bookings section */}
-        {section === "bookings" && <BookingsSection user={user} />}
-        
-        {/* Requests section */}
-        {section === "requests" && <RequestsSection user={user} />}
-        
-        {/* Services section */}
-        {section === "services" && <ServicesSection user={user} />}
+        {section === "profile" && (
+          <ProfileSection user={user} hasPermission={hasPermission} />
+        )}
+
+        {/* Bookings section - check permission */}
+        {section === "bookings" && (
+          permissionsLoading || hasPermission('view_own_bookings') ? (
+            <BookingsSection user={user} />
+          ) : (
+            <PermissionDenied section="Bookings" permission="View Own Bookings" />
+          )
+        )}
+
+        {/* Requests section - check permission */}
+        {section === "requests" && (
+          permissionsLoading || hasPermission('view_own_bookings') ? (
+            <RequestsSection user={user} hasPermission={hasPermission} />
+          ) : (
+            <PermissionDenied section="My Requests" permission="View Own Bookings" />
+          )
+        )}
+
+        {/* Services section - check permission */}
+        {section === "services" && (
+          permissionsLoading || hasPermission('create_bookings') ? (
+            <ServicesSection user={user} />
+          ) : (
+            <PermissionDenied section="Book a Service" permission="Create Bookings" />
+          )
+        )}
         
         {/* Notifications section */}
         {section === "notifications" && <NotificationsSection user={user} />}
@@ -281,24 +442,443 @@ export default function UserDashboardCatchAll() {
   );
 }
 
-function ProfileSection({ user }: { user: User }) {
-  return (
-    <div style={{ background: 'white', borderRadius: 16, padding: 32, maxWidth: 600, margin: '0 auto', boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)' }}>
-      <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 24 }}>👤 My Profile</h2>
-      <div style={{ display: 'grid', gap: '16px' }}>
-        <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
-          <strong>Username:</strong> {user.username}
-        </div>
-        <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
-          <strong>User Type:</strong> {user.user_type}
-        </div>
-        <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
-          <strong>Role:</strong> {user.role}
-        </div>
-        <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
-          <strong>Status:</strong> <span style={{ color: user.is_active ? '#28a745' : '#dc3545' }}>{user.is_active ? 'Active' : 'Inactive'}</span>
+function ProfileSection({ user, hasPermission }: { user: User; hasPermission: (permission: string) => boolean }) {
+  const canView = hasPermission('view_own_profile');
+  const canEdit = hasPermission('edit_own_profile');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    username: user.username,
+    oldPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+  const [editLoading, setEditLoading] = useState(false);
+  const [showPasswordFields, setShowPasswordFields] = useState(false);
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!canEdit) {
+      alert("❌ You don't have permission to edit your profile.");
+      return;
+    }
+
+    // Validation
+    if (showPasswordFields) {
+      if (!editForm.oldPassword) {
+        alert("❌ Please enter your current password.");
+        return;
+      }
+      if (!editForm.newPassword) {
+        alert("❌ Please enter a new password.");
+        return;
+      }
+      if (editForm.newPassword !== editForm.confirmPassword) {
+        alert("❌ New password and confirm password don't match.");
+        return;
+      }
+      if (editForm.newPassword.length < 6) {
+        alert("❌ New password must be at least 6 characters long.");
+        return;
+      }
+    }
+
+    if (!editForm.username.trim()) {
+      alert("❌ Username cannot be empty.");
+      return;
+    }
+
+    setEditLoading(true);
+
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        alert("❌ Authentication required. Please log in again.");
+        return;
+      }
+
+      const updateData: any = {
+        username: editForm.username.trim()
+      };
+
+      // Only include password fields if user wants to change password
+      if (showPasswordFields) {
+        updateData.old_password = editForm.oldPassword;
+        updateData.new_password = editForm.newPassword;
+      }
+
+      console.log('🔄 Updating profile with data:', { ...updateData, old_password: '***', new_password: '***' });
+
+      const response = await fetch("http://localhost:8000/api/auth/me/update/", {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(updateData)
+      });
+
+      console.log('🌐 Profile update response status:', response.status);
+
+      if (response.ok) {
+        const updatedUser = await response.json();
+        console.log('✅ Profile updated successfully:', updatedUser);
+
+        alert("✅ Profile updated successfully!");
+
+        // Reset form and exit edit mode
+        setIsEditing(false);
+        setShowPasswordFields(false);
+        setEditForm({
+          username: updatedUser.username,
+          oldPassword: '',
+          newPassword: '',
+          confirmPassword: ''
+        });
+
+        // Refresh the page to show updated user data
+        window.location.reload();
+      } else {
+        const errorData = await response.json();
+        console.error('❌ Profile update failed:', errorData);
+
+        let errorMessage = 'Unknown error';
+        if (errorData.error) {
+          errorMessage = errorData.error;
+        } else if (errorData.detail) {
+          errorMessage = errorData.detail;
+        }
+
+        alert(`❌ Failed to update profile: ${errorMessage}`);
+      }
+    } catch (error) {
+      console.error('💥 Error updating profile:', error);
+      alert('❌ Network error. Please try again.');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setShowPasswordFields(false);
+    setEditForm({
+      username: user.username,
+      oldPassword: '',
+      newPassword: '',
+      confirmPassword: ''
+    });
+  };
+
+  // If user doesn't have permission to view profile, show permission denied message
+  if (!canView) {
+    return (
+      <div style={{
+        background: 'white',
+        borderRadius: 16,
+        padding: 32,
+        maxWidth: 600,
+        margin: '0 auto',
+        boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)',
+        textAlign: 'center'
+      }}>
+        <div style={{
+          padding: '40px 20px',
+          background: 'rgba(220, 53, 69, 0.1)',
+          borderRadius: 12,
+          border: '2px solid rgba(220, 53, 69, 0.2)'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
+          <h2 style={{
+            color: '#dc3545',
+            fontSize: '1.5rem',
+            fontWeight: 700,
+            margin: '0 0 12px 0'
+          }}>
+            Access Denied
+          </h2>
+          <p style={{
+            color: '#6c757d',
+            fontSize: '1rem',
+            margin: '0 0 16px 0',
+            lineHeight: 1.5
+          }}>
+            You don't have permission to view your profile.
+          </p>
+          <div style={{
+            background: 'rgba(220, 53, 69, 0.1)',
+            padding: '12px 16px',
+            borderRadius: 8,
+            border: '1px solid rgba(220, 53, 69, 0.2)',
+            marginBottom: '16px'
+          }}>
+            <strong style={{ color: '#dc3545' }}>Required permission:</strong>
+            <span style={{ color: '#6c757d', marginLeft: '8px' }}>View Own Profile</span>
+          </div>
+          <p style={{
+            color: '#6c757d',
+            fontSize: '0.9rem',
+            margin: 0,
+            fontStyle: 'italic'
+          }}>
+            Contact your administrator to request access.
+          </p>
         </div>
       </div>
+    );
+  }
+
+  return (
+    <div style={{ background: 'white', borderRadius: 16, padding: 32, maxWidth: 600, margin: '0 auto', boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>👤 My Profile</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {!canEdit && (
+            <span style={{ color: '#6c757d', fontSize: '0.9rem', fontStyle: 'italic' }}>
+              🔒 Read-only
+            </span>
+          )}
+          {canEdit && !isEditing && (
+            <button
+              onClick={() => setIsEditing(true)}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 6,
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                fontWeight: 600,
+                transition: 'all 0.3s ease'
+              }}
+            >
+              ✏️ Edit Profile
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!isEditing ? (
+        // View Mode
+        <div style={{ display: 'grid', gap: '16px' }}>
+          <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
+            <strong>Username:</strong> {user.username}
+          </div>
+          <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
+            <strong>User Type:</strong> {user.user_type}
+          </div>
+          <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
+            <strong>Role:</strong> {user.role}
+          </div>
+        </div>
+      ) : (
+        // Edit Mode
+        <form onSubmit={handleEditSubmit} style={{ display: 'grid', gap: '20px' }}>
+          {/* Username Field */}
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#2c3e50' }}>
+              Username:
+            </label>
+            <input
+              type="text"
+              value={editForm.username}
+              onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: 8,
+                border: '2px solid #e9ecef',
+                fontSize: '1rem',
+                transition: 'border-color 0.3s ease'
+              }}
+              onFocus={(e) => e.target.style.borderColor = '#667eea'}
+              onBlur={(e) => e.target.style.borderColor = '#e9ecef'}
+            />
+          </div>
+
+          {/* Read-only fields */}
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#6c757d' }}>
+              User Type:
+            </label>
+            <input
+              type="text"
+              value={user.user_type}
+              disabled
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: 8,
+                border: '2px solid #e9ecef',
+                fontSize: '1rem',
+                background: '#f8f9fa',
+                color: '#6c757d'
+              }}
+            />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#6c757d' }}>
+              Role:
+            </label>
+            <input
+              type="text"
+              value={user.role}
+              disabled
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: 8,
+                border: '2px solid #e9ecef',
+                fontSize: '1rem',
+                background: '#f8f9fa',
+                color: '#6c757d'
+              }}
+            />
+          </div>
+
+          {/* Password Change Section */}
+          <div style={{ marginTop: '20px', padding: '20px', background: '#f8f9fa', borderRadius: 8, border: '1px solid #e9ecef' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <input
+                type="checkbox"
+                id="changePassword"
+                checked={showPasswordFields}
+                onChange={(e) => {
+                  setShowPasswordFields(e.target.checked);
+                  if (!e.target.checked) {
+                    setEditForm({
+                      ...editForm,
+                      oldPassword: '',
+                      newPassword: '',
+                      confirmPassword: ''
+                    });
+                  }
+                }}
+                style={{ width: '16px', height: '16px' }}
+              />
+              <label htmlFor="changePassword" style={{ fontWeight: 600, color: '#2c3e50', cursor: 'pointer' }}>
+                🔐 Change Password
+              </label>
+            </div>
+
+            {showPasswordFields && (
+              <div style={{ display: 'grid', gap: '16px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#2c3e50' }}>
+                    Current Password:
+                  </label>
+                  <input
+                    type="password"
+                    value={editForm.oldPassword}
+                    onChange={(e) => setEditForm({ ...editForm, oldPassword: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: 8,
+                      border: '2px solid #e9ecef',
+                      fontSize: '1rem',
+                      transition: 'border-color 0.3s ease'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#667eea'}
+                    onBlur={(e) => e.target.style.borderColor = '#e9ecef'}
+                    placeholder="Enter your current password"
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#2c3e50' }}>
+                    New Password:
+                  </label>
+                  <input
+                    type="password"
+                    value={editForm.newPassword}
+                    onChange={(e) => setEditForm({ ...editForm, newPassword: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: 8,
+                      border: '2px solid #e9ecef',
+                      fontSize: '1rem',
+                      transition: 'border-color 0.3s ease'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#667eea'}
+                    onBlur={(e) => e.target.style.borderColor = '#e9ecef'}
+                    placeholder="Enter new password (min 6 characters)"
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#2c3e50' }}>
+                    Confirm New Password:
+                  </label>
+                  <input
+                    type="password"
+                    value={editForm.confirmPassword}
+                    onChange={(e) => setEditForm({ ...editForm, confirmPassword: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: 8,
+                      border: '2px solid #e9ecef',
+                      fontSize: '1rem',
+                      transition: 'border-color 0.3s ease'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#667eea'}
+                    onBlur={(e) => e.target.style.borderColor = '#e9ecef'}
+                    placeholder="Confirm your new password"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+            <button
+              type="submit"
+              disabled={editLoading}
+              style={{
+                flex: 1,
+                padding: '12px 24px',
+                borderRadius: 8,
+                background: editLoading
+                  ? '#6c757d'
+                  : 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                color: 'white',
+                border: 'none',
+                cursor: editLoading ? 'not-allowed' : 'pointer',
+                fontSize: '1rem',
+                fontWeight: 600,
+                transition: 'all 0.3s ease'
+              }}
+            >
+              {editLoading ? '⏳ Saving...' : '✅ Save Changes'}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              disabled={editLoading}
+              style={{
+                flex: 1,
+                padding: '12px 24px',
+                borderRadius: 8,
+                background: '#6c757d',
+                color: 'white',
+                border: 'none',
+                cursor: editLoading ? 'not-allowed' : 'pointer',
+                fontSize: '1rem',
+                fontWeight: 600,
+                transition: 'all 0.3s ease'
+              }}
+            >
+              ❌ Cancel
+            </button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
@@ -815,63 +1395,86 @@ function BookingsSection({ user }: { user: User }) {
   );
 }
 
-function RequestsSection({ user }: { user: User }) {
+function RequestsSection({ user, hasPermission }: { user: User; hasPermission: (permission: string) => boolean }) {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancelLoading, setCancelLoading] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState('');
   const [ratingLoading, setRatingLoading] = useState(false);
 
-  useEffect(() => {
-    const fetchRequests = async () => {
-      const token = localStorage.getItem("access_token");
-      if (!token) {
-        setLoading(false);
-        return;
-      }
+  const fetchRequests = async () => {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
-      try {
-        console.log('📋 Fetching user bookings...');
-        // Fetch bookings from backend API
-        const response = await fetch("http://localhost:8000/api/bookings/user/", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+    try {
+      console.log('📋 Fetching user bookings...');
+      // Fetch bookings from backend API
+      const response = await fetch("http://localhost:8000/api/bookings/user/", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-        console.log('📋 Bookings response status:', response.status);
+      console.log('📋 Bookings response status:', response.status);
 
-        if (response.ok) {
-          const bookings = await response.json();
-          console.log('✅ Bookings fetched successfully:', bookings);
-          console.log('📊 Number of bookings:', bookings.length);
-          setRequests(bookings);
-        } else {
-          console.error('❌ Failed to fetch bookings, status:', response.status);
-          const errorText = await response.text();
-          console.error('❌ Error response:', errorText);
-          setRequests([]);
-        }
-      } catch (error) {
-        console.error('💥 Error fetching bookings:', error);
+      if (response.ok) {
+        const bookings = await response.json();
+        console.log('✅ Bookings fetched successfully:', bookings);
+        console.log('📊 Number of bookings:', bookings.length);
+        setRequests(bookings);
+      } else {
+        console.error('❌ Failed to fetch bookings, status:', response.status);
+        const errorText = await response.text();
+        console.error('❌ Error response:', errorText);
         setRequests([]);
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (error) {
+      console.error('💥 Error fetching bookings:', error);
+      setRequests([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchRequests();
   }, []);
 
   const handleCancelRequest = async (requestId: string) => {
-    // Find the request to check its current status
-    const requestToCancel = requests.find(req => req.id === parseInt(requestId));
+    console.log('=== CANCEL REQUEST DEBUG ===');
+    console.log('Raw requestId parameter:', requestId, typeof requestId);
+    console.log('Parsed requestId:', parseInt(requestId));
+    console.log('Total requests in state:', requests.length);
+    console.log('Available requests:', requests.map(r => ({ id: r.id, status: r.status, type: typeof r.id })));
+
+    // Try different ways to find the request
+    const requestToCancel1 = requests.find(req => req.id === parseInt(requestId));
+    const requestToCancel2 = requests.find(req => req.id.toString() === requestId);
+    const requestToCancel3 = requests.find(req => req.id == requestId); // Loose equality
+    const requestToCancel4 = requests.find(req => String(req.id) === String(requestId)); // Both as strings
+
+    console.log('Find attempt 1 (parseInt):', requestToCancel1 ? 'FOUND' : 'NOT FOUND');
+    console.log('Find attempt 2 (toString):', requestToCancel2 ? 'FOUND' : 'NOT FOUND');
+    console.log('Find attempt 3 (loose ==):', requestToCancel3 ? 'FOUND' : 'NOT FOUND');
+    console.log('Find attempt 4 (both strings):', requestToCancel4 ? 'FOUND' : 'NOT FOUND');
+
+    const requestToCancel = requestToCancel1 || requestToCancel2 || requestToCancel3 || requestToCancel4;
 
     if (!requestToCancel) {
-      alert("❌ Request not found.");
+      console.error('Request not found in local state');
+      console.log('Searched for ID:', parseInt(requestId));
+      console.log('Available IDs:', requests.map(r => r.id));
+      console.log('Available ID types:', requests.map(r => typeof r.id));
+      alert("❌ Request not found in local data. Please refresh the page and try again.");
       return;
     }
+
+    console.log('Found request to cancel:', requestToCancel);
 
     // Double-check the status before attempting to cancel
     if (requestToCancel.status?.toLowerCase() === 'cancelled') {
@@ -898,6 +1501,7 @@ function RequestsSection({ user }: { user: User }) {
       }
 
       console.log(`Attempting to cancel request ${requestId} with status: ${requestToCancel.status}`);
+      console.log('API URL:', `http://localhost:8000/api/bookings/${requestId}/cancel/`);
 
       const response = await fetch(`http://localhost:8000/api/bookings/${requestId}/cancel/`, {
         method: "POST",
@@ -907,26 +1511,146 @@ function RequestsSection({ user }: { user: User }) {
         }
       });
 
+      console.log('API Response status:', response.status);
+      console.log('API Response ok:', response.ok);
+
       if (response.ok) {
         const data = await response.json();
+        console.log('Cancel success response:', data);
         alert("✅ Booking request cancelled successfully!");
-        // Update the request status to cancelled instead of removing it
-        const updatedRequests = requests.map(req =>
-          req.id === parseInt(requestId)
-            ? { ...req, status: 'cancelled' }
-            : req
-        );
+
+        // Update the request status to cancelled in local state
+        const updatedRequests = requests.map(req => {
+          if (req.id === parseInt(requestId) || req.id.toString() === requestId || req.id == requestId) {
+            console.log('Updating request status from', req.status, 'to cancelled');
+            return { ...req, status: 'cancelled', cancelled_by: 'customer' };
+          }
+          return req;
+        });
+
+        console.log('Updated requests:', updatedRequests.map(r => ({ id: r.id, status: r.status })));
         setRequests(updatedRequests);
+
+        // Also refresh the data from server to ensure consistency
+        console.log('Refreshing requests from server...');
+        setTimeout(() => {
+          fetchRequests();
+        }, 500); // Small delay to ensure backend has processed the change
       } else {
-        const errorData = await response.json();
-        console.error('Cancel request failed:', errorData);
-        alert(`❌ Failed to cancel request: ${errorData.error || 'Unknown error'}`);
+        const errorText = await response.text();
+        console.error('Cancel request failed - Status:', response.status);
+        console.error('Cancel request failed - Response:', errorText);
+
+        let errorMessage = 'Unknown error';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorData.detail || 'Unknown error';
+        } catch (e) {
+          errorMessage = errorText || 'Unknown error';
+        }
+
+        alert(`❌ Failed to cancel request: ${errorMessage}`);
       }
     } catch (error) {
       console.error('Error cancelling request:', error);
       alert("❌ Network error. Please try again.");
     } finally {
       setCancelLoading(null);
+    }
+  };
+
+  const handleDeleteRequest = async (requestId: string) => {
+    console.log('=== DELETE REQUEST DEBUG ===');
+    console.log('Attempting to delete request ID:', requestId);
+
+    // Find the request to check its current status
+    const requestToDelete = requests.find(req => req.id === parseInt(requestId) || req.id.toString() === requestId || req.id == requestId);
+
+    if (!requestToDelete) {
+      console.error('Request not found in local state');
+      alert("❌ Request not found. Please refresh the page and try again.");
+      return;
+    }
+
+    console.log('Found request to delete:', requestToDelete);
+
+    // Check if request can be deleted (only completed or cancelled)
+    const deletableStatuses = ['completed', 'cancelled'];
+    if (!deletableStatuses.includes(requestToDelete.status?.toLowerCase())) {
+      alert("❌ You can only delete completed or cancelled bookings.");
+      return;
+    }
+
+    // Confirm deletion
+    const confirmDelete = window.confirm(
+      `Are you sure you want to permanently delete this ${requestToDelete.status} booking? This action cannot be undone.`
+    );
+
+    if (!confirmDelete) {
+      return;
+    }
+
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      alert("❌ Authentication required. Please log in again.");
+      return;
+    }
+
+    setDeleteLoading(requestId);
+
+    try {
+      console.log(`Attempting to delete request ${requestId} with status: ${requestToDelete.status}`);
+      console.log('API URL:', `http://localhost:8000/api/bookings/${requestId}/delete/`);
+
+      const response = await fetch(`http://localhost:8000/api/bookings/${requestId}/delete/`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      console.log('API Response status:', response.status);
+      console.log('API Response ok:', response.ok);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Delete success response:', data);
+        alert("✅ Booking deleted successfully!");
+
+        // Remove the request from local state
+        const updatedRequests = requests.filter(req =>
+          req.id !== parseInt(requestId) && req.id.toString() !== requestId && req.id != requestId
+        );
+
+        console.log('Updated requests after deletion:', updatedRequests.map(r => ({ id: r.id, status: r.status })));
+        setRequests(updatedRequests);
+
+        // Also refresh the data from server to ensure consistency
+        console.log('Refreshing requests from server...');
+        setTimeout(() => {
+          fetchRequests();
+        }, 500);
+      } else {
+        const errorText = await response.text();
+        console.error('Delete request failed - Status:', response.status);
+        console.error('Delete request failed - Response:', errorText);
+
+        let errorMessage = 'Unknown error';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorData.detail || 'Unknown error';
+        } catch (e) {
+          errorMessage = errorText || 'Unknown error';
+        }
+
+        alert(`❌ Failed to delete request: ${errorMessage}`);
+      }
+    } catch (error) {
+      console.error('💥 Error deleting request:', error);
+      alert('❌ Error deleting request. Please try again.');
+    } finally {
+      setDeleteLoading(null);
     }
   };
 
@@ -1296,8 +2020,8 @@ function RequestsSection({ user }: { user: User }) {
                 </p>
               </div>
 
-              {/* Cancel Button - only show for pending or accepted requests (not cancelled, declined, completed, etc.) */}
-              {(request.status?.toLowerCase() === 'pending' || request.status?.toLowerCase() === 'accepted') && (
+              {/* Cancel Button - only show for pending or accepted requests AND if user has permission */}
+              {(request.status?.toLowerCase() === 'pending' || request.status?.toLowerCase() === 'accepted') && hasPermission('cancel_bookings') && (
                 <div style={{ marginTop: 20, textAlign: 'center' }}>
                   <button
                     onClick={() => handleCancelRequest(request.id.toString())}
@@ -1332,6 +2056,77 @@ function RequestsSection({ user }: { user: User }) {
                   >
                     {cancelLoading === request.id.toString() ? '⏳ Cancelling...' : '❌ Cancel Request'}
                   </button>
+                </div>
+              )}
+
+              {/* Permission denied message for cancel */}
+              {(request.status?.toLowerCase() === 'pending' || request.status?.toLowerCase() === 'accepted') && !hasPermission('cancel_bookings') && (
+                <div style={{
+                  marginTop: 20,
+                  textAlign: 'center',
+                  padding: '12px 20px',
+                  background: 'rgba(220, 53, 69, 0.1)',
+                  borderRadius: 8,
+                  border: '1px solid rgba(220, 53, 69, 0.2)'
+                }}>
+                  <small style={{ color: '#dc3545', fontSize: '0.85rem' }}>
+                    🔒 You don't have permission to cancel bookings. Contact your administrator.
+                  </small>
+                </div>
+              )}
+
+              {/* Delete Button - only show for completed or cancelled requests AND if user has permission */}
+              {(request.status?.toLowerCase() === 'completed' || request.status?.toLowerCase() === 'cancelled') && hasPermission('delete_bookings') && (
+                <div style={{ marginTop: 20, textAlign: 'center' }}>
+                  <button
+                    onClick={() => handleDeleteRequest(request.id.toString())}
+                    disabled={deleteLoading === request.id.toString()}
+                    style={{
+                      padding: '12px 24px',
+                      borderRadius: 8,
+                      background: deleteLoading === request.id.toString()
+                        ? '#6c757d'
+                        : 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                      color: 'white',
+                      border: 'none',
+                      cursor: deleteLoading === request.id.toString() ? 'not-allowed' : 'pointer',
+                      fontSize: '0.9rem',
+                      fontWeight: 600,
+                      transition: 'all 0.3s ease',
+                      boxShadow: '0 4px 15px rgba(220, 53, 69, 0.3)',
+                      transform: 'translateY(0)'
+                    }}
+                    onMouseEnter={e => {
+                      if (deleteLoading !== request.id.toString()) {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(220, 53, 69, 0.4)';
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (deleteLoading !== request.id.toString()) {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 4px 15px rgba(220, 53, 69, 0.3)';
+                      }
+                    }}
+                  >
+                    {deleteLoading === request.id.toString() ? '⏳ Deleting...' : '🗑️ Delete Booking'}
+                  </button>
+                </div>
+              )}
+
+              {/* Permission denied message for delete */}
+              {(request.status?.toLowerCase() === 'completed' || request.status?.toLowerCase() === 'cancelled') && !hasPermission('delete_bookings') && (
+                <div style={{
+                  marginTop: 20,
+                  textAlign: 'center',
+                  padding: '12px 20px',
+                  background: 'rgba(220, 53, 69, 0.1)',
+                  borderRadius: 8,
+                  border: '1px solid rgba(220, 53, 69, 0.2)'
+                }}>
+                  <small style={{ color: '#dc3545', fontSize: '0.85rem' }}>
+                    🔒 You don't have permission to delete bookings. Contact your administrator.
+                  </small>
                 </div>
               )}
 

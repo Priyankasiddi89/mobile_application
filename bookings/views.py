@@ -44,6 +44,29 @@ class CreateBookingView(APIView):
     
     def post(self, request):
         """Create a new booking (request)"""
+
+        # Check if user has permission to create bookings
+        from authentication.models import UserTypeRolePermission, Permission
+
+        def check_user_permission(user, permission_codename):
+            try:
+                permission = Permission.objects.get(codename=permission_codename)
+                user_permission = UserTypeRolePermission.objects.get(
+                    user_type=user.user_type,
+                    role=user.role,
+                    permission=permission,
+                    is_granted=True
+                )
+                return True
+            except (Permission.DoesNotExist, UserTypeRolePermission.DoesNotExist):
+                return False
+
+        if not check_user_permission(request.user, 'create_bookings'):
+            return Response(
+                {'error': 'You do not have permission to create bookings. Contact your administrator to grant "Create Bookings" permission.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         serializer = BookingCreateSerializer(data=request.data)
         if serializer.is_valid():
             try:

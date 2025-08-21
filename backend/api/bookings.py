@@ -25,8 +25,15 @@ def create_booking(request):
     POST /api/bookings/create/
     """
     try:
+        # Check if user has permission to create bookings
+        if not check_user_permission(request.user, 'create_bookings'):
+            return Response(
+                {'error': 'You do not have permission to create bookings. Contact your administrator to grant "Create Bookings" permission.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         data = request.data
-        
+
         # Validate required fields
         required_fields = ['subcategory_id', 'service_date']
         for field in required_fields:
@@ -76,6 +83,13 @@ def get_user_bookings(request):
     GET /api/bookings/user/
     """
     try:
+        # Check if user has permission to view their own bookings
+        if not check_user_permission(request.user, 'view_own_bookings'):
+            return Response(
+                {'error': 'You do not have permission to view bookings. Contact your administrator to grant "View Own Bookings" permission.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         bookings = Booking.objects.filter(customer=request.user.username).order_by('-created_at')
         serializer = BookingSerializer(bookings, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -452,6 +466,39 @@ def complete_booking(request, booking_id):
         )
 
 
+def check_user_permission(user, permission_codename):
+    """Check if user has a specific permission based on their user_type and role"""
+    from authentication.models import UserTypeRolePermission, Permission
+
+    print(f"DEBUG: Checking permission '{permission_codename}' for user: {user.username}")
+    print(f"DEBUG: User type: {user.user_type}, Role: {user.role}")
+
+    try:
+        permission = Permission.objects.get(codename=permission_codename)
+        print(f"DEBUG: Found permission: {permission.name}")
+
+        user_permission = UserTypeRolePermission.objects.get(
+            user_type=user.user_type,
+            role=user.role,
+            permission=permission,
+            is_granted=True
+        )
+        print(f"DEBUG: Permission granted: {user_permission}")
+        return True
+    except Permission.DoesNotExist:
+        print(f"DEBUG: Permission '{permission_codename}' does not exist")
+        return False
+    except UserTypeRolePermission.DoesNotExist:
+        print(f"DEBUG: User does not have permission '{permission_codename}' or it's not granted")
+        # Check what permissions the user actually has
+        user_perms = UserTypeRolePermission.objects.filter(
+            user_type=user.user_type,
+            role=user.role,
+            is_granted=True
+        )
+        print(f"DEBUG: User's granted permissions: {[p.permission.codename for p in user_perms]}")
+        return False
+
 @api_view(['POST'])
 @authentication_classes([PostgreSQLJWTAuthentication])
 @permission_classes([IsAuthenticated])
@@ -461,7 +508,14 @@ def cancel_booking_request(request, booking_id):
     POST /api/bookings/{booking_id}/cancel/
     """
     try:
-        print(f"DEBUG: Cancel request - User: {request.user.username}, Type: {request.user.user_type}")
+        print(f"DEBUG: Cancel request - User: {request.user.username}, Type: {request.user.user_type}, Role: {request.user.role}")
+
+        # Check if user has permission to cancel bookings
+        if not check_user_permission(request.user, 'cancel_bookings'):
+            return Response(
+                {'error': f'You do not have permission to cancel bookings. Contact your administrator to grant "Cancel Bookings" permission.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
         if request.user.user_type not in ['End User', 'Service Provider']:
             return Response(
@@ -537,6 +591,116 @@ def cancel_booking_request(request, booking_id):
         }, status=status.HTTP_200_OK)
 
     except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['DELETE'])
+@authentication_classes([PostgreSQLJWTAuthentication])
+@permission_classes([IsAuthenticated])
+def delete_booking_request(request, booking_id):
+    """
+    Permanently delete a booking (admin only)
+    DELETE /api/bookings/{booking_id}/delete/
+    """
+    try:
+        print(f"DEBUG: Delete request - User: {request.user.username}, Type: {request.user.user_type}, Role: {request.user.role}")
+
+        # Check if user has permission to delete bookings
+        if not check_user_permission(request.user, 'delete_bookings'):
+            return Response(
+                {'error': f'You do not have permission to delete bookings. Contact your administrator to grant "Delete Bookings" permission.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Get booking
+        try:
+            booking = Booking.objects.get(id=booking_id)
+        except Booking.DoesNotExist:
+            return Response(
+                {'error': 'Booking not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Store booking info for response
+        booking_info = {
+            'id': booking.id,
+            'customer': booking.customer,
+            'subcategory': booking.subcategory.name,
+            'status': booking.status
+        }
+
+        # Delete the booking permanently
+        booking.delete()
+
+        print(f"DEBUG: Successfully deleted booking {booking_id}")
+
+        return Response({
+            'message': 'Booking deleted permanently',
+            'deleted_booking': booking_info
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+@authentication_classes([PostgreSQLJWTAuthentication])
+@permission_classes([IsAuthenticated])
+def get_user_permissions(request):
+    """
+    Get permissions for the current user
+    GET /api/user/permissions/
+    """
+    try:
+        user = request.user
+        print(f"DEBUG: Getting permissions for user: {user.username}, Type: {user.user_type}, Role: {user.role}")
+
+        from authentication.models import UserTypeRolePermission
+
+        # Get permissions for this user's type and role
+        user_permissions = UserTypeRolePermission.objects.filter(
+            user_type=user.user_type,
+            role=user.role,
+            is_granted=True
+        ).select_related('permission')
+
+        # Format permissions by category
+        permissions_by_category = {}
+        for user_perm in user_permissions:
+            permission = user_perm.permission
+            if permission.category not in permissions_by_category:
+                permissions_by_category[permission.category] = []
+
+            permissions_by_category[permission.category].append({
+                'id': permission.id,
+                'name': permission.name,
+                'codename': permission.codename,
+                'description': permission.description,
+                'is_granted': True
+            })
+
+        # Also create a flat list for easy checking
+        flat_permissions = {}
+        for user_perm in user_permissions:
+            flat_permissions[user_perm.permission.codename] = True
+
+        print(f"DEBUG: Found {len(flat_permissions)} permissions for user")
+
+        return Response({
+            'permissions_by_category': permissions_by_category,
+            'flat_permissions': flat_permissions,
+            'user_type': user.user_type,
+            'role': user.role
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        print(f"ERROR: Failed to get user permissions: {str(e)}")
         return Response(
             {'error': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR

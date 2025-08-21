@@ -179,10 +179,32 @@ def create_provider_specific_booking(request):
     """
     try:
         user = request.user
-        
+
+        # Check if user has permission to create bookings
+        from authentication.models import UserTypeRolePermission, Permission
+
+        def check_user_permission(user, permission_codename):
+            try:
+                permission = Permission.objects.get(codename=permission_codename)
+                user_permission = UserTypeRolePermission.objects.get(
+                    user_type=user.user_type,
+                    role=user.role,
+                    permission=permission,
+                    is_granted=True
+                )
+                return True
+            except (Permission.DoesNotExist, UserTypeRolePermission.DoesNotExist):
+                return False
+
+        if not check_user_permission(user, 'create_bookings'):
+            return Response(
+                {'error': 'You do not have permission to create bookings. Contact your administrator to grant "Create Bookings" permission.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         if user.user_type != 'End User':
             return Response(
-                {'error': 'Only end users can create bookings'}, 
+                {'error': 'Only end users can create bookings'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
