@@ -89,11 +89,65 @@ export default function AdminDashboardCatchAll() {
 function ProfileSection({ user }: { user: User }) {
   return (
     <div style={{ background: 'white', borderRadius: 16, padding: 32, maxWidth: 500, margin: '40px auto', boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)' }}>
-      <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 16 }}>Profile</h2>
-      <div style={{ marginBottom: 12 }}><b>Username:</b> {user.username}</div>
-      <div style={{ marginBottom: 12 }}><b>User Type:</b> {user.user_type}</div>
-      <div style={{ marginBottom: 12 }}><b>Role:</b> {user.role}</div>
-      <div style={{ marginBottom: 12 }}><b>Status:</b> {user.is_active ? 'Active' : 'Inactive'}</div>
+      <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 24, color: '#2c3e50' }}>Profile Information</h2>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
+          <strong style={{ color: '#495057' }}>Username:</strong>
+          <div style={{ marginTop: 4, color: '#2c3e50' }}>{user.username}</div>
+        </div>
+
+        <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
+          <strong style={{ color: '#495057' }}>User Type:</strong>
+          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{
+              background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%)',
+              color: 'white',
+              padding: '6px 12px',
+              borderRadius: 8,
+              fontSize: '14px',
+              fontWeight: 600
+            }}>
+              {user.user_type}
+            </span>
+          </div>
+        </div>
+
+        <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
+          <strong style={{ color: '#495057' }}>Role:</strong>
+          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{
+              background: '#28a745',
+              color: 'white',
+              padding: '6px 12px',
+              borderRadius: 8,
+              fontSize: '14px',
+              fontWeight: 600
+            }}>
+              {user.role}
+            </span>
+            <span style={{ fontSize: '12px', color: '#6c757d', fontStyle: 'italic' }}>
+              (Determines permissions)
+            </span>
+          </div>
+        </div>
+
+        <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
+          <strong style={{ color: '#495057' }}>Status:</strong>
+          <div style={{ marginTop: 8 }}>
+            <span style={{
+              background: user.is_active ? '#28a745' : '#dc3545',
+              color: 'white',
+              padding: '6px 12px',
+              borderRadius: 8,
+              fontSize: '14px',
+              fontWeight: 600
+            }}>
+              {user.is_active ? 'Active' : 'Inactive'}
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

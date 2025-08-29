@@ -1,95 +1,116 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 
-export default function ServiceProviderSidebar() {
+interface ServiceProviderSidebarProps {
+  userPermissions?: { [key: string]: boolean };
+}
+
+export default function ServiceProviderSidebar({ userPermissions = {} }: ServiceProviderSidebarProps) {
   const router = useRouter();
+
+  // Helper function to check permissions
+  const hasPermission = (permissionCode: string): boolean => {
+    return userPermissions[permissionCode] === true;
+  };
   return (
     <aside style={{
-      width: 280,
+      width: 260,
       background: "linear-gradient(180deg, #667eea 0%, #764ba2 100%)",
-      borderRight: "none",
-      padding: "32px 0 32px 0",
+      borderRight: "1px solid rgba(255,255,255,0.1)",
+      padding: "20px 0",
       display: "flex",
       flexDirection: "column",
-      alignItems: "center",
-      position: "sticky",
+      position: "fixed",
       top: 0,
+      left: 0,
       height: "100vh",
-      boxShadow: "4px 0 20px rgba(0,0,0,0.15)",
-      zIndex: 2,
-      color: "white"
+      boxShadow: "2px 0 10px rgba(0,0,0,0.1)",
+      zIndex: 1000,
+      color: "white",
+      overflowY: "auto"
     }}>
-      {/* Header Section */}
+      {/* Compact Header */}
       <div style={{
-        padding: "0 24px",
-        marginBottom: 32,
-        textAlign: "center",
-        position: "relative"
+        padding: "0 20px",
+        marginBottom: 24,
+        textAlign: "center"
       }}>
-        {/* Background decoration */}
         <div style={{
-          position: 'absolute',
-          top: -20,
-          right: -20,
-          width: 80,
-          height: 80,
-          background: 'rgba(255,255,255,0.1)',
-          borderRadius: '50%',
-          filter: 'blur(30px)'
-        }}></div>
+          fontSize: 40,
+          background: "rgba(255,255,255,0.2)",
+          borderRadius: "50%",
+          width: 70,
+          height: 70,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "white",
+          margin: "0 auto 12px auto",
+          border: "2px solid rgba(255,255,255,0.3)"
+        }}>🔧</div>
 
-        <div style={{ position: "relative", zIndex: 1 }}>
-          <div style={{
-            fontSize: 56,
-            background: "rgba(255,255,255,0.2)",
-            borderRadius: "50%",
-            width: 100,
-            height: 100,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "white",
-            marginBottom: 16,
-            margin: "0 auto 16px auto",
-            backdropFilter: "blur(10px)",
-            border: "2px solid rgba(255,255,255,0.3)",
-            boxShadow: "0 8px 25px rgba(0,0,0,0.2)"
-          }}>🔧</div>
-
-          <div style={{
-            background: "rgba(255,255,255,0.15)",
-            padding: "12px 16px",
-            borderRadius: "12px",
-            backdropFilter: "blur(10px)",
-            border: "1px solid rgba(255,255,255,0.2)"
-          }}>
-            <h2 style={{
-              margin: 0,
-              fontSize: "1.3rem",
-              fontWeight: 800,
-              textShadow: "0 2px 4px rgba(0,0,0,0.3)",
-              marginBottom: "4px"
-            }}>
-              Service Provider
-            </h2>
-            <p style={{
-              margin: 0,
-              opacity: 0.9,
-              fontSize: "13px",
-              fontWeight: 500
-            }}>
-              Professional Dashboard
-            </p>
-          </div>
-        </div>
+        <h2 style={{
+          margin: 0,
+          fontSize: "1.1rem",
+          fontWeight: 700,
+          marginBottom: "4px"
+        }}>
+          Service Provider
+        </h2>
+        <p style={{
+          margin: 0,
+          opacity: 0.8,
+          fontSize: "12px",
+          fontWeight: 500
+        }}>
+          Dashboard
+        </p>
       </div>
       <nav style={{ width: "100%" }}>
+        {/* Dashboard - Always visible */}
         <SidebarNavItem label="Dashboard" icon="🛠️" onClick={() => router.push('/service_provider_dashboard')} />
-        <SidebarNavItem label="My Services" icon="🔧" onClick={() => router.push('/service_provider_dashboard/services')} />
-        <SidebarNavItem label="Incoming Requests" icon="📥" onClick={() => router.push('/service_provider_dashboard/requests')} />
-        <SidebarNavItem label="Active Bookings" icon="🟢" onClick={() => router.push('/service_provider_dashboard/active')} />
-        <SidebarNavItem label="Previous Bookings" icon="📚" onClick={() => router.push('/service_provider_dashboard/previous')} />
-        <SidebarNavItem label="Earnings" icon="💰" onClick={() => router.push('/service_provider_dashboard/earnings')} />
+
+        {/* Profile - Check view_own_profile permission */}
+        {hasPermission('view_own_profile') && (
+          <SidebarNavItem label="My Profile" icon="👤" onClick={() => router.push('/service_provider_dashboard/profile')} />
+        )}
+
+        {/* Services - Check register_for_services permission */}
+        {hasPermission('register_for_services') && (
+          <SidebarNavItem label="My Services" icon="🔧" onClick={() => router.push('/service_provider_dashboard/services')} />
+        )}
+
+        {/* Incoming Requests - Check view_booking_requests permission */}
+        {hasPermission('view_booking_requests') && (
+          <SidebarNavItem label="Incoming Requests" icon="📥" onClick={() => router.push('/service_provider_dashboard/requests')} />
+        )}
+
+        {/* Active Bookings - Check view_active_bookings permission */}
+        {hasPermission('view_active_bookings') && (
+          <SidebarNavItem label="Active Bookings" icon="🟢" onClick={() => router.push('/service_provider_dashboard/active')} />
+        )}
+
+        {/* Previous Bookings - Check view_previous_bookings permission */}
+        {hasPermission('view_previous_bookings') && (
+          <SidebarNavItem label="Previous Bookings" icon="📚" onClick={() => router.push('/service_provider_dashboard/previous')} />
+        )}
+
+        {/* Availability Management - Check manage_availability permission */}
+        {hasPermission('manage_availability') && (
+          <SidebarNavItem label="Availability" icon="📅" onClick={() => router.push('/service_provider_dashboard/availability')} />
+        )}
+
+        {/* Ratings - Check view_own_ratings permission */}
+        {hasPermission('view_own_ratings') && (
+          <SidebarNavItem label="Ratings & Reviews" icon="⭐" onClick={() => router.push('/service_provider_dashboard/ratings')} />
+        )}
+
+        {/* Earnings - Check view_earnings permission */}
+        {hasPermission('view_earnings') && (
+          <SidebarNavItem label="Earnings" icon="💰" onClick={() => router.push('/service_provider_dashboard/earnings')} />
+        )}
+
+        {/* Logout - Always visible */}
         <SidebarNavItem label="Logout" icon="🚪" onClick={() => {
           localStorage.clear();
           sessionStorage.clear();
@@ -107,45 +128,39 @@ function SidebarNavItem({ label, icon, onClick }: { label: string; icon: string;
       style={{
         display: "flex",
         alignItems: "center",
-        padding: "16px 24px",
+        padding: "12px 20px",
         cursor: "pointer",
-        fontSize: 16,
+        fontSize: 14,
         color: "rgba(255,255,255,0.9)",
-        borderRadius: 12,
-        margin: "6px 16px",
-        transition: "all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+        borderRadius: 8,
+        margin: "3px 12px",
+        transition: "all 0.2s ease",
         userSelect: "none",
         background: "rgba(255,255,255,0.1)",
-        backdropFilter: "blur(10px)",
-        border: "1px solid rgba(255,255,255,0.15)",
-        fontWeight: 600
+        border: "1px solid rgba(255,255,255,0.1)",
+        fontWeight: 500
       }}
       onMouseEnter={e => {
-        e.currentTarget.style.background = "rgba(255,255,255,0.25)";
-        e.currentTarget.style.transform = "translateX(8px) scale(1.02)";
-        e.currentTarget.style.boxShadow = "0 8px 25px rgba(0,0,0,0.2)";
+        e.currentTarget.style.background = "rgba(255,255,255,0.2)";
+        e.currentTarget.style.transform = "translateX(4px)";
         e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)";
       }}
       onMouseLeave={e => {
         e.currentTarget.style.background = "rgba(255,255,255,0.1)";
-        e.currentTarget.style.transform = "translateX(0) scale(1)";
-        e.currentTarget.style.boxShadow = "none";
-        e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)";
+        e.currentTarget.style.transform = "translateX(0)";
+        e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
       }}
     >
       <span style={{
-        fontSize: 20,
-        marginRight: 14,
-        background: "rgba(255,255,255,0.2)",
-        padding: "6px",
-        borderRadius: "8px",
+        fontSize: 16,
+        marginRight: 10,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        width: "32px",
-        height: "32px"
+        width: "20px",
+        height: "20px"
       }}>{icon}</span>
-      <span style={{ fontWeight: 600 }}>{label}</span>
+      <span style={{ fontWeight: 500 }}>{label}</span>
     </div>
   );
 }

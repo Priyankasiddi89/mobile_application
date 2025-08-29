@@ -69,7 +69,87 @@ def create_booking(request):
         
     except Exception as e:
         return Response(
-            {'error': str(e)}, 
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['POST'])
+@authentication_classes([PostgreSQLJWTAuthentication])
+@permission_classes([IsAuthenticated])
+def create_cart_booking(request):
+    """Create a booking from cart items (multiple services from same provider)"""
+    try:
+        data = request.data
+        cart_items = data.get('cart_items', [])
+        notes = data.get('notes', '')
+
+        if not cart_items:
+            return Response(
+                {'error': 'Cart is empty'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate all items are from same provider
+        provider_ids = set(item.get('provider_id') for item in cart_items)
+        if len(provider_ids) > 1:
+            return Response(
+                {'error': 'All services must be from the same provider'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        provider_id = list(provider_ids)[0]
+
+        # Get provider user
+        try:
+            from authentication.models import User
+            provider = User.objects.get(id=provider_id)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'Provider not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Calculate total price and create booking with multiple services
+        total_price = sum(float(item.get('price', 0)) for item in cart_items)
+        service_names = [item.get('subcategory_name') for item in cart_items]
+
+        # Use the first service's subcategory for the main booking
+        first_service_id = cart_items[0].get('subcategory_id')
+        try:
+            from bookings.models import ServiceSubcategory
+            subcategory = ServiceSubcategory.objects.get(id=first_service_id)
+        except ServiceSubcategory.DoesNotExist:
+            return Response(
+                {'error': 'Service not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Create booking
+        from bookings.models import Booking
+        from django.utils import timezone
+
+        booking = Booking.objects.create(
+            customer=request.user.username,
+            provider=provider.username,
+            subcategory=subcategory,
+            booking_date=timezone.now(),
+            service_date=timezone.now() + timezone.timedelta(days=1),  # Default to tomorrow
+            total_price=total_price,
+            status='pending',
+            payment_status='unpaid',
+            notes=f"{notes}\n\nServices included: {', '.join(service_names)}\nTotal services: {len(cart_items)}"
+        )
+
+        # Store cart items as JSON in a custom field (we'll need to add this to the model)
+        # For now, we'll store it in the notes field
+
+        from bookings.serializers import BookingSerializer
+        serializer = BookingSerializer(booking)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
@@ -108,13 +188,25 @@ def get_provider_bookings(request):
     """
     Get bookings assigned to current provider
     GET /api/bookings/provider/ - Returns ALL bookings
-    GET /api/bookings/provider/?status=active - Returns only active bookings
+    GET /api/bookings/provider/?status=active - Returns only active bookings (accepted, confirmed)
     GET /api/bookings/provider/?status=completed - Returns only completed bookings
     """
     try:
+        print(f"DEBUG: get_provider_bookings called by user: {request.user.username}")
+        print(f"DEBUG: User type: '{request.user.user_type}'")
+        print(f"DEBUG: User role: '{request.user.role}'")
+
         if request.user.user_type != 'Service Provider':
+            print(f"DEBUG: Access denied - user type is '{request.user.user_type}', expected 'Service Provider'")
             return Response(
-                {'error': 'Only service providers can access this endpoint'},
+                {'error': f'Only service providers can access this endpoint. Your user type: {request.user.user_type}'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Check if user has permission to view active bookings
+        if not check_user_permission(request.user, 'view_active_bookings'):
+            return Response(
+                {'error': 'You do not have permission to view active bookings. Contact your administrator to grant "View Active Bookings" permission.'},
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -143,8 +235,9 @@ def get_provider_bookings(request):
 
         # Apply status filtering
         if status_filter == 'active':
-            # Active bookings: accepted, confirmed, in_progress (exclude cancelled)
-            bookings = bookings_query.filter(status__in=['accepted', 'confirmed', 'in_progress']).order_by('-created_at')
+            # Active bookings: accepted, confirmed (exclude pending, cancelled, declined, completed)
+            active_statuses = ['accepted', 'confirmed']
+            bookings = bookings_query.filter(status__in=active_statuses).order_by('-created_at')
             print(f"DEBUG: Active bookings filter - found {bookings.count()} active bookings")
             for booking in bookings:
                 print(f"DEBUG: Active booking - ID: {booking.id}, Status: {booking.status}, Provider: {booking.provider}, Customer: {booking.customer}")
@@ -177,9 +270,21 @@ def get_provider_requests(request):
     GET /api/bookings/provider/requests/
     """
     try:
+        print(f"DEBUG: get_provider_requests called by user: {request.user.username}")
+        print(f"DEBUG: User type: '{request.user.user_type}'")
+        print(f"DEBUG: User role: '{request.user.role}'")
+
         if request.user.user_type != 'Service Provider':
+            print(f"DEBUG: Access denied - user type is '{request.user.user_type}', expected 'Service Provider'")
             return Response(
-                {'error': 'Only service providers can access this endpoint'}, 
+                {'error': f'Only service providers can access this endpoint. Your user type: {request.user.user_type}'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Check if user has permission to view booking requests
+        if not check_user_permission(request.user, 'view_booking_requests'):
+            return Response(
+                {'error': 'You do not have permission to view booking requests. Contact your administrator to grant "View Booking Requests" permission.'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
@@ -289,7 +394,14 @@ def accept_booking_request(request, booking_id):
                 {'error': 'Only service providers can accept requests'},
                 status=status.HTTP_403_FORBIDDEN
             )
-        
+
+        # Check if user has permission to accept booking requests
+        if not check_user_permission(request.user, 'accept_booking_requests'):
+            return Response(
+                {'error': 'You do not have permission to accept booking requests. Contact your administrator to grant "Accept Booking Requests" permission.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         # Get booking - can be either unassigned or assigned to this provider
         try:
             from django.db.models import Q
@@ -327,10 +439,23 @@ def accept_booking_request(request, booking_id):
         # Check if provider is registered for this service
         if not UserRegisteredService.objects.filter(user=request.user, service=booking.subcategory).exists():
             return Response(
-                {'error': 'You are not registered for this service'}, 
+                {'error': 'You are not registered for this service'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
+        # Validate time slot availability using centralized validator
+        from .time_slot_validator import TimeSlotValidator
+
+        is_valid, error_response = TimeSlotValidator.validate_time_slot(
+            provider_id=request.user.id,
+            service_date=booking.service_date,
+            service_duration_hours=1,  # Default 1 hour service duration
+            exclude_booking_id=booking.id  # Exclude current booking from conflict check
+        )
+
+        if not is_valid:
+            return error_response
+
         # Accept the booking
         booking.status = 'accepted'
         # Only set provider if not already set (for unassigned requests)
@@ -571,13 +696,20 @@ def cancel_booking_request(request, booking_id):
         old_status = booking.status
         booking.status = 'cancelled'
 
-        # Set who cancelled the booking
+        # Set who cancelled the booking and reason
+        cancellation_reason = request.data.get('cancellation_reason', '')
         if request.user.user_type == 'End User':
             booking.cancelled_by = 'customer'
             user_type_text = "Customer"
+            if not cancellation_reason:
+                cancellation_reason = "Customer requested cancellation"
         else:
             booking.cancelled_by = 'provider'
             user_type_text = "Service Provider"
+            if not cancellation_reason:
+                cancellation_reason = "Service provider cancelled the booking"
+
+        booking.cancellation_reason = cancellation_reason
 
         booking.save()
 
@@ -876,12 +1008,14 @@ def manage_provider_availability(request):
                 date__lte=end_date
             ).order_by('date', 'start_time')
 
-            # Get bookings for this date range
+            # Get bookings for this date range (all statuses that should be visible in availability management)
+            # Include pending to show upcoming requests, and active statuses that block time slots
+            active_booking_statuses = ['pending', 'accepted', 'confirmed', 'completed']
             bookings = Booking.objects.filter(
                 provider=request.user.username,
                 service_date__date__gte=start_date,
                 service_date__date__lte=end_date,
-                status__in=['pending', 'accepted', 'active', 'completed']
+                status__in=active_booking_statuses
             ).order_by('service_date')
 
             # Serialize availability slots
@@ -1103,68 +1237,50 @@ def get_provider_available_slots(request, provider_id):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Check if provider is off on this date
-        is_off_day = ProviderOffDay.objects.filter(
-            provider=provider,
-            date=selected_date
-        ).exists()
+        # Use centralized validator to get available slots
+        from .time_slot_validator import TimeSlotValidator
 
-        if is_off_day:
-            return Response({
-                'provider_id': provider_id,
-                'provider_name': provider.username,
-                'date': selected_date,
-                'available_slots': [],
-                'message': 'Provider is off on this date'
-            }, status=status.HTTP_200_OK)
-
-        # Get provider's availability slots for this date
-        availability_slots = ProviderAvailability.objects.filter(
-            provider=provider,
+        available_slots = TimeSlotValidator.get_available_slots(
+            provider_id=provider_id,
             date=selected_date,
-            is_available=True
-        ).order_by('start_time')
-
-        # Get existing bookings for this date
-        existing_bookings = Booking.objects.filter(
-            provider=provider.username,
-            service_date__date=selected_date,
-            status__in=['pending', 'accepted', 'active']
+            service_duration_hours=1  # Default 1 hour service duration
         )
 
-        # Build list of available slots
-        available_slots = []
-        for slot in availability_slots:
-            # Check if this slot conflicts with existing bookings
-            from django.utils import timezone
-            slot_start = timezone.make_aware(datetime.combine(selected_date, slot.start_time))
-            slot_end = timezone.make_aware(datetime.combine(selected_date, slot.end_time))
+        # Determine message based on availability
+        message = None
+        if not available_slots:
+            # Check specific reasons for no availability
+            is_off_day = ProviderOffDay.objects.filter(
+                provider=provider,
+                date=selected_date
+            ).exists()
 
-            is_slot_available = True
-            for booking in existing_bookings:
-                booking_time = booking.service_date
-                # Assume each booking takes 2 hours (can be made configurable)
-                booking_end = booking_time + timedelta(hours=2)
+            if is_off_day:
+                message = 'Provider is off on this date'
+            else:
+                availability_slots = ProviderAvailability.objects.filter(
+                    provider=provider,
+                    date=selected_date,
+                    is_available=True
+                ).exists()
 
-                # Check for time overlap
-                if (slot_start < booking_end and slot_end > booking_time):
-                    is_slot_available = False
-                    break
+                if not availability_slots:
+                    message = 'Provider has no availability slots for this date'
+                else:
+                    message = 'All time slots are booked for this date'
 
-            if is_slot_available:
-                available_slots.append({
-                    'start_time': slot.start_time.strftime('%H:%M'),
-                    'end_time': slot.end_time.strftime('%H:%M'),
-                    'display_time': f"{slot.start_time.strftime('%I:%M %p')} - {slot.end_time.strftime('%I:%M %p')}"
-                })
-
-        return Response({
+        response_data = {
             'provider_id': provider_id,
             'provider_name': provider.username,
             'date': selected_date,
             'available_slots': available_slots,
             'total_slots': len(available_slots)
-        }, status=status.HTTP_200_OK)
+        }
+
+        if message:
+            response_data['message'] = message
+
+        return Response(response_data, status=status.HTTP_200_OK)
 
     except Exception as e:
         return Response(

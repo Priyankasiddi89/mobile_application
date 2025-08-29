@@ -39,6 +39,7 @@ pip install -r requirements.txt
 # 2. Setup database (PostgreSQL required)
 python manage.py migrate
 python create_superuser_if_needed.py
+python create_clean_permissions.py
 python update_services_database.py
 python create_test_users_postgresql.py
 
@@ -77,6 +78,7 @@ npx next dev
    python manage.py makemigrations
    python manage.py migrate
    python create_superuser_if_needed.py
+   python create_clean_permissions.py
    python update_services_database.py
    python create_test_users_postgresql.py
    ```
@@ -361,12 +363,12 @@ Complete 5-star rating and review system that builds trust between customers and
 ```bash
 # Backend
 python manage.py runserver           # Start Django server
-python test_api_endpoints.py         # Test API endpoints
 
 # Frontend
 npx next dev                         # Start Next.js development server
 
-# Database
+# Database Setup
+python create_clean_permissions.py   # Setup user permissions
 python update_services_database.py   # Populate service catalog
 python create_test_users_postgresql.py # Create test users
 ```

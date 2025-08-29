@@ -20,6 +20,7 @@ class ServiceSubcategory(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField()
     price = models.DecimalField(max_digits=10, decimal_places=2)  # Fixed price
+    duration_hours = models.DecimalField(max_digits=3, decimal_places=1, default=1.0, help_text="Service duration in hours")
     category = models.ForeignKey(ServiceCategory, on_delete=models.CASCADE, related_name='subcategories')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -67,7 +68,10 @@ class Booking(models.Model):
     cancelled_by = models.CharField(max_length=20, blank=True, null=True, choices=[
         ('customer', 'Customer'),
         ('provider', 'Service Provider'),
+        ('system', 'System (Auto-cancelled)'),
     ])  # Track who cancelled the booking
+    cancellation_reason = models.TextField(max_length=500, blank=True, null=True,
+                                         help_text="Reason for cancellation (e.g., 'Customer requested cancellation', 'Service provider unavailable', 'Automatically cancelled due to expiry')")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

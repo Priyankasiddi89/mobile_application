@@ -48,8 +48,7 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
   const [loadingSlots, setLoadingSlots] = useState(false);
 
   const timeSlots = [
-    "09:00", "10:00", "11:00", "12:00", "13:00", 
-    "14:00", "15:00", "16:00", "17:00", "18:00"
+    "09:00", "12:00", "15:00", "18:00"
   ];
 
   // Fetch available providers when modal opens
@@ -203,15 +202,63 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
   const handleDateChange = (date: string) => {
     setSelectedDate(date);
     setSelectedTime(""); // Reset time when date changes
+    setError(""); // Clear any previous errors
+
+    // Validate date range
+    const selectedDateObj = new Date(date);
+    const now = new Date();
+    const minDate = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours from now
+    const maxDate = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 days from now
+
+    if (selectedDateObj <= minDate) {
+      setError("Bookings must be made at least 2 hours in advance");
+      return;
+    }
+
+    if (selectedDateObj >= maxDate) {
+      setError("Bookings cannot be made more than 90 days in advance");
+      return;
+    }
+
     if (selectedProvider && date) {
       fetchAvailableSlots(selectedProvider.provider_id, date);
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const validateTimeSlot = (time: string) => {
+    if (!time) return true; // Allow empty time for initial state
+
+    const [hours] = time.split(':').map(Number);
+
+    // Validate business hours (9 AM to 9 PM - matching 4 time slots)
+    if (hours < 9 || hours >= 21) {
+      return "Bookings are only allowed between 9:00 AM and 9:00 PM";
+    }
+
+    return true;
+  };
+
+  const handleTimeChange = (time: string) => {
+    setSelectedTime(time);
+    setError(""); // Clear any previous errors
+
+    const validation = validateTimeSlot(time);
+    if (validation !== true) {
+      setError(validation);
+    }
+  };
+
+  const handleAddToCart = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedDate || !selectedTime) {
       setError("Please select both date and time");
+      return;
+    }
+
+    // Validate time slot
+    const timeValidation = validateTimeSlot(selectedTime);
+    if (timeValidation !== true) {
+      setError(timeValidation);
       return;
     }
 
@@ -229,51 +276,68 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
     setError("");
 
     try {
-      const token = localStorage.getItem("access_token");
-      if (!token) {
-        setError("Please login to book a service");
-        return;
+      // Get current cart from localStorage
+      const currentCart = JSON.parse(localStorage.getItem('userCart') || '{"items": [], "provider_id": null, "provider_name": null}');
+
+      // Check if adding service from different provider
+      if (currentCart.provider_id && currentCart.provider_id !== selectedProvider.provider_id.toString()) {
+        const confirmClear = window.confirm(
+          `The service you want to add is provided by a different provider (${selectedProvider.provider_name}). Do you want to clear the cart and add this service?`
+        );
+
+        if (!confirmClear) {
+          setIsLoading(false);
+          return;
+        }
+
+        // Clear cart and start fresh
+        currentCart.items = [];
+        currentCart.provider_id = selectedProvider.provider_id.toString();
+        currentCart.provider_name = selectedProvider.provider_name;
       }
 
-      const serviceDateTime = new Date(`${selectedDate}T${selectedTime}`);
-      
-      const response = await fetch("http://localhost:8000/api/marketplace/book-provider/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          provider_id: selectedProvider.provider_id,
-          service_id: parseInt(subcategory.id),
-          service_date: serviceDateTime.toISOString(),
-          notes: notes,
+      // Set provider if cart is empty
+      if (!currentCart.provider_id) {
+        currentCart.provider_id = selectedProvider.provider_id.toString();
+        currentCart.provider_name = selectedProvider.provider_name;
+      }
+
+      // Create new cart item
+      const newItem = {
+        id: `${subcategory.id}_${Date.now()}`,
+        subcategory_id: parseInt(subcategory.id),
+        subcategory_name: subcategory.name,
+        provider_id: selectedProvider.provider_id.toString(),
+        provider_name: selectedProvider.provider_name,
+        price: selectedProvider.provider_price,
+        description: subcategory.description,
+        category_name: categoryName,
+        added_at: new Date().toISOString(),
+        booking_details: {
+          selected_date: selectedDate,
+          selected_time: selectedTime,
           address: address,
-        }),
-      });
+          notes: notes
+        }
+      };
 
-      console.log('Booking request:', {
-        provider_id: selectedProvider.provider_id,
-        service_id: parseInt(subcategory.id),
-        service_date: serviceDateTime.toISOString(),
-        notes: notes,
-        address: address,
-      });
-      console.log('Response status:', response.status);
+      // Add new item to cart
+      currentCart.items.push(newItem);
+      currentCart.total_price = currentCart.items.reduce((sum: number, item: any) => sum + item.price, 0);
+      currentCart.total_items = currentCart.items.length;
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Booking success:', data);
-        alert(`✅ Booking request sent to ${selectedProvider.provider_name}!\n\n💰 Total: $${selectedProvider.provider_price}\n📅 Date: ${selectedDate} at ${selectedTime}\n\nThe provider will review your request and respond soon. You can check the status in "My Requests" section.`);
-        onClose();
-        resetForm();
-      } else {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('Booking error:', response.status, errorData);
-        setError(errorData.error || `Failed to create booking (${response.status})`);
-      }
+      // Save to localStorage
+      localStorage.setItem('userCart', JSON.stringify(currentCart));
+
+      // Dispatch custom event to update cart count
+      window.dispatchEvent(new Event('cartUpdated'));
+
+      alert(`✅ ${subcategory.name} added to cart!\n\n💰 Price: $${selectedProvider.provider_price}\n👤 Provider: ${selectedProvider.provider_name}\n📅 Date: ${selectedDate} at ${selectedTime}\n\nYou can view your cart and add more services from the same provider, or proceed to checkout.`);
+
+      onClose();
+      resetForm();
     } catch (err) {
-      setError("Network error. Please try again.");
+      setError("Failed to add to cart. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -623,7 +687,7 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
               </div>
             )}
 
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleAddToCart}>
               <div style={{ marginBottom: "20px" }}>
                 <label style={{
                   display: "block",
@@ -683,7 +747,7 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
                 ) : (
                   <select
                     value={selectedTime}
-                    onChange={(e) => setSelectedTime(e.target.value)}
+                    onChange={(e) => handleTimeChange(e.target.value)}
                     required
                     disabled={!selectedDate || availableSlots.length === 0}
                     style={{
@@ -812,7 +876,7 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
                     padding: "12px 24px",
                     border: "none",
                     borderRadius: "8px",
-                    background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                    background: "linear-gradient(135deg, #28a745 0%, #20c997 100%)",
                     color: "white",
                     cursor: isLoading ? "not-allowed" : "pointer",
                     fontSize: "16px",
@@ -820,7 +884,7 @@ export default function BookingModal({ isOpen, onClose, subcategory, categoryNam
                     opacity: isLoading ? 0.7 : 1,
                   }}
                 >
-                  {isLoading ? "Booking..." : "Confirm Booking"}
+                  {isLoading ? "Adding to Cart..." : "🛒 Add to Cart"}
                 </button>
               </div>
             </form>

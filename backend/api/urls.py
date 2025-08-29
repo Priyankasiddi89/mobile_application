@@ -19,7 +19,7 @@ from .bookings import (
     update_booking_status, accept_booking_request, decline_booking_request, complete_booking,
     cancel_booking_request, delete_booking_request, create_provider_rating, get_provider_ratings,
     manage_provider_availability, manage_provider_off_days, get_provider_available_slots,
-    get_user_permissions
+    get_user_permissions, create_cart_booking
 )
 from .analytics import (
     get_customer_dashboard_stats, get_provider_dashboard_stats,
@@ -27,7 +27,7 @@ from .analytics import (
 )
 from .marketplace import (
     register_service_with_price, get_available_providers, create_provider_specific_booking,
-    rate_provider, get_provider_profile, update_service_availability
+    rate_provider, get_provider_profile, update_service_availability, get_provider_services
 )
 
 # Import platform provider dashboard views
@@ -57,6 +57,7 @@ urlpatterns = [
 
     # Bookings API endpoints
     path('bookings/create/', create_booking, name='api_create_booking'),
+    path('bookings/create-cart/', create_cart_booking, name='api_create_cart_booking'),
     path('bookings/user/', get_user_bookings, name='api_user_bookings'),
     path('bookings/provider/', get_provider_bookings, name='api_provider_bookings'),
     path('bookings/provider/requests/', get_provider_requests, name='api_provider_requests'),
@@ -85,6 +86,7 @@ urlpatterns = [
     path('marketplace/book-provider/', create_provider_specific_booking, name='api_create_provider_specific_booking'),
     path('marketplace/rate-provider/', rate_provider, name='api_rate_provider'),
     path('marketplace/provider/<int:provider_id>/profile/', get_provider_profile, name='api_get_provider_profile'),
+    path('marketplace/provider/<int:provider_id>/services/', get_provider_services, name='api_get_provider_services'),
     path('marketplace/service-registration/<int:service_registration_id>/', update_service_availability, name='api_update_service_availability'),
 
     # Platform Provider Dashboard API endpoints

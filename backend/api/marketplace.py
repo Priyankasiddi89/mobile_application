@@ -1,13 +1,14 @@
 """
 Marketplace API endpoints for provider pricing and customer selection
 """
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.db.models import Avg, Count, Q
 from django.contrib.auth import get_user_model
 from bookings.models import ServiceSubcategory, UserRegisteredService, Booking, ProviderRating
+from authentication.views import PostgreSQLJWTAuthentication
 import json
 
 User = get_user_model()
@@ -258,6 +259,20 @@ def create_provider_specific_booking(request):
         # Parse service_date if it's a string
         if isinstance(service_date, str):
             service_date = parse_datetime(service_date)
+
+        # Validate time slot availability using centralized validator
+        from .time_slot_validator import TimeSlotValidator
+
+        validator = TimeSlotValidator(
+            provider_id=provider.id,
+            service_date=service_date,
+            service_subcategory=service
+        )
+
+        is_valid, error_response = validator.validate_all()
+
+        if not is_valid:
+            return error_response
 
         booking = Booking.objects.create(
             customer=user.username,
@@ -514,6 +529,52 @@ def update_service_availability(request, service_registration_id):
                 'description': provider_service.description
             }
         }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+@api_view(['GET'])
+@authentication_classes([PostgreSQLJWTAuthentication])
+@permission_classes([IsAuthenticated])
+def get_provider_services(request, provider_id):
+    """Get all services offered by a specific provider - accessible by all authenticated users"""
+    try:
+        from authentication.models import User
+        from bookings.models import UserRegisteredService, ServiceSubcategory
+
+        # Get provider
+        try:
+            provider = User.objects.get(id=provider_id, user_type='Service Provider')
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'Provider not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Get all services registered by this provider
+        registered_services = UserRegisteredService.objects.filter(
+            user=provider
+        ).select_related('service', 'service__category')
+
+        services_data = []
+        for reg_service in registered_services:
+            services_data.append({
+                'id': reg_service.id,
+                'subcategory_id': reg_service.service.id,
+                'subcategory_name': reg_service.service.name,
+                'category_name': reg_service.service.category.name,
+                'description': reg_service.description or reg_service.service.description,
+                'provider_id': str(provider.id),
+                'provider_name': provider.username,
+                'provider_price': float(reg_service.provider_price),
+                'is_available': reg_service.is_available,
+                'created_at': reg_service.registered_at.isoformat() if reg_service.registered_at else None
+            })
+
+        return Response(services_data, status=status.HTTP_200_OK)
 
     except Exception as e:
         return Response(

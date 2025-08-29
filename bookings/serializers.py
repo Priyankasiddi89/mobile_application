@@ -37,6 +37,7 @@ class BookingSerializer(serializers.Serializer):
     notes = serializers.CharField(required=False, allow_blank=True)
     address = serializers.CharField(required=False, allow_blank=True)
     cancelled_by = serializers.CharField(required=False, allow_blank=True)
+    cancellation_reason = serializers.CharField(required=False, allow_blank=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
 
@@ -67,9 +68,36 @@ class BookingCreateSerializer(serializers.Serializer):
     notes = serializers.CharField(required=False, allow_blank=True)
 
     def validate_service_date(self, value):
-        # Ensure service date is in the future
-        if value <= timezone.now():
-            raise serializers.ValidationError("Service date must be in the future")
+        from datetime import time, timedelta
+
+        now = timezone.now()
+
+        # Ensure service date is in the future with minimum advance notice
+        min_advance_hours = 2
+        min_booking_time = now + timedelta(hours=min_advance_hours)
+        if value <= min_booking_time:
+            raise serializers.ValidationError(
+                f"Bookings must be made at least {min_advance_hours} hours in advance"
+            )
+
+        # Prevent bookings too far in the future
+        max_advance_days = 90
+        max_booking_time = now + timedelta(days=max_advance_days)
+        if value >= max_booking_time:
+            raise serializers.ValidationError(
+                f"Bookings cannot be made more than {max_advance_days} days in advance"
+            )
+
+        # Validate business hours (9 AM to 9 PM - matching 4 time slots)
+        booking_time = value.time()
+        business_start = time(9, 0)   # 9 AM
+        business_end = time(21, 0)    # 9 PM
+
+        if booking_time < business_start or booking_time >= business_end:
+            raise serializers.ValidationError(
+                f"Bookings are only allowed between {business_start.strftime('%I:%M %p')} and {business_end.strftime('%I:%M %p')}"
+            )
+
         return value
 
 class ProviderRatingSerializer(serializers.Serializer):

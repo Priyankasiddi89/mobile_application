@@ -327,6 +327,13 @@ class UpdateBookingStatusView(APIView):
         new_status = request.data.get('status')
         if new_status in ['accepted', 'confirmed', 'completed', 'cancelled']:
             booking.status = new_status
+
+            # If cancelling, set cancellation info
+            if new_status == 'cancelled':
+                booking.cancelled_by = 'provider'
+                cancellation_reason = request.data.get('cancellation_reason', 'Service provider cancelled the booking')
+                booking.cancellation_reason = cancellation_reason
+
             booking.save()
             serializer = BookingSerializer(booking)
             return Response(serializer.data)

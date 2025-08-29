@@ -52,18 +52,202 @@ interface Booking {
   status: string;
   payment_status: string;
   notes: string;
+  address: string;
+  cancelled_by?: string;
+  cancellation_reason?: string;
   created_at: string;
   updated_at: string;
 }
+
+// Helper function to extract service names from multi-service bookings
+const getServiceDisplayName = (booking: any) => {
+  const notesText = booking.notes || '';
+  const servicesMatch = notesText.match(/Services included: ([^\n\r]+)/);
+  const serviceCount = notesText.match(/Total services: (\d+)/);
+
+  if (servicesMatch && serviceCount && parseInt(serviceCount[1]) > 1) {
+    // Multi-service booking - show all services
+    return servicesMatch[1];
+  } else {
+    // Single service booking - show subcategory name
+    return booking.subcategory?.name || 'Service Request';
+  }
+};
+
+// Helper function to get service count
+const getServiceCount = (booking: any) => {
+  const notesText = booking.notes || '';
+  const serviceCount = notesText.match(/Total services: (\d+)/);
+  return serviceCount ? parseInt(serviceCount[1]) : 1;
+};
+
+// Helper function to check if booking is multi-service
+const isMultiServiceBooking = (booking: any) => {
+  const notesText = booking.notes || '';
+  const serviceCount = notesText.match(/Total services: (\d+)/);
+  return serviceCount && parseInt(serviceCount[1]) > 1;
+};
+
+// Helper function to get services list
+const getServicesList = (booking: any) => {
+  const notesText = booking.notes || '';
+  const servicesMatch = notesText.match(/Services included: ([^\n\r]+)/);
+  return servicesMatch ? servicesMatch[1].split(', ') : [];
+};
+
+// Helper function to parse booking notes (same as end user dashboard)
+const parseBookingNotes = (notes: string) => {
+  const result = {
+    isMultiService: false,
+    serviceCount: 1,
+    servicesList: [] as string[],
+    description: '',
+    address: '',
+    timeSlot: ''
+  };
+
+  if (!notes) return result;
+
+
+
+  // Check for multi-service booking
+  const servicesMatch = notes.match(/Services included: ([^\n\r]+)/);
+  const serviceCountMatch = notes.match(/Total services: (\d+)/);
+
+  if (servicesMatch && serviceCountMatch) {
+    const serviceCount = parseInt(serviceCountMatch[1]);
+    result.isMultiService = serviceCount > 1; // Only multi if more than 1 service
+    result.serviceCount = serviceCount;
+    result.servicesList = servicesMatch[1].split(', ').map(s => s.trim());
+  } else {
+    // Check for cart-based multi-service booking format
+    const cartMatch = notes.match(/Multi-service booking with (\d+) services/);
+    if (cartMatch) {
+      const serviceCount = parseInt(cartMatch[1]);
+      result.isMultiService = serviceCount > 1; // Only multi if more than 1 service
+      result.serviceCount = serviceCount;
+    }
+  }
+
+  // Extract description
+  const descriptionMatch = notes.match(/Description: ([^\n\r]+)/);
+  if (descriptionMatch) {
+    result.description = descriptionMatch[1].trim();
+  }
+
+  // Extract address - try multiple patterns
+  let addressMatch = notes.match(/Address: ([^\n\r]+)/);
+  if (!addressMatch) {
+    // Try alternative patterns
+    addressMatch = notes.match(/address: ([^\n\r]+)/i);
+  }
+  if (!addressMatch) {
+    // Try to find address in different format
+    addressMatch = notes.match(/Service Address: ([^\n\r]+)/);
+  }
+  if (!addressMatch) {
+    // Try to find address at the end of notes (common pattern)
+    addressMatch = notes.match(/Address:\s*([^,\n\r]+?)(?:\s+Description:|$)/);
+  }
+  if (addressMatch) {
+    result.address = addressMatch[1].trim();
+  }
+
+  // Extract time slot - try multiple patterns including time ranges
+  let timeMatch = notes.match(/Time Slot: ([^\n\r]+)/);
+  if (!timeMatch) {
+    timeMatch = notes.match(/time slot: ([^\n\r]+)/i);
+  }
+  if (!timeMatch) {
+    // Look for time ranges like "3pm-6pm", "3:00pm-6:00pm", "3 PM - 6 PM"
+    timeMatch = notes.match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*[-–]\s*\d{1,2}(?::\d{2})?\s*(?:am|pm))/i);
+  }
+  if (!timeMatch) {
+    // Look for single times like "at 11:32 PM"
+    timeMatch = notes.match(/at (\d{1,2}:\d{2}\s*(?:AM|PM))/i);
+  }
+  if (!timeMatch) {
+    // Look for any time format
+    timeMatch = notes.match(/(\d{1,2}:\d{2}\s*(?:AM|PM))/i);
+  }
+  if (!timeMatch) {
+    // Look for simple time formats like "3pm", "6am"
+    timeMatch = notes.match(/(\d{1,2}\s*(?:am|pm))/i);
+  }
+  if (timeMatch) {
+    result.timeSlot = timeMatch[1].trim();
+  }
+
+  return result;
+};
 
 export default function ProviderDashboardCatchAll() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [userPermissions, setUserPermissions] = useState<{[key: string]: boolean}>({});
+  const [permissionsLoading, setPermissionsLoading] = useState(true);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const router = useRouter();
   const params = useParams();
   const section = Array.isArray(params.section) ? params.section[0] : params.section;
+  const subsection = Array.isArray(params.section) ? params.section[1] : undefined;
+
+  // Function to load user permissions
+  const loadUserPermissions = async () => {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      setPermissionsLoading(false);
+      return;
+    }
+
+    try {
+      console.log('🔐 Loading Service Provider permissions...');
+      const response = await fetch("http://localhost:8000/api/user/permissions/", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const permissionData = await response.json();
+        const flatPermissions = permissionData.flat_permissions || {};
+        console.log('✅ Service Provider permissions loaded:', flatPermissions);
+        setUserPermissions(flatPermissions);
+      } else {
+        console.error('❌ Failed to load permissions');
+        // Set default permissions for Service Providers if API fails
+        const fallbackPermissions = {
+          'view_own_profile': true,
+          'edit_own_profile': true,
+          'view_booking_requests': true,
+          'accept_booking_requests': true,
+          'view_active_bookings': true,
+          'manage_availability': true
+        };
+        setUserPermissions(fallbackPermissions);
+      }
+    } catch (error) {
+      console.error('💥 Error loading permissions:', error);
+      // Set fallback permissions
+      const fallbackPermissions = {
+        'view_own_profile': true,
+        'edit_own_profile': true,
+        'view_booking_requests': true,
+        'accept_booking_requests': true,
+        'view_active_bookings': true,
+        'manage_availability': true
+      };
+      setUserPermissions(fallbackPermissions);
+    } finally {
+      setPermissionsLoading(false);
+    }
+  };
+
+  // Function to check if user has a specific permission
+  const hasPermission = (permissionCode: string): boolean => {
+    return userPermissions[permissionCode] === true;
+  };
 
   // Fetch notifications
   const fetchNotifications = () => {
@@ -80,7 +264,7 @@ export default function ProviderDashboardCatchAll() {
           id: request.id,
           type: 'new_request',
           title: 'New Booking Request',
-          message: `New request for ${request.subcategory.name} from ${request.customer}`,
+          message: `New request for ${getServiceDisplayName(request)} from ${request.customer}`,
           time: new Date(request.created_at).toLocaleTimeString(),
           isRead: false
         }));
@@ -114,6 +298,9 @@ export default function ProviderDashboardCatchAll() {
         setUser(data);
         setLoading(false);
 
+        // Load user permissions after user data is loaded
+        loadUserPermissions();
+
         // Start fetching notifications
         fetchNotifications();
         // Set up periodic notification fetching
@@ -138,10 +325,103 @@ export default function ProviderDashboardCatchAll() {
   }
   if (!user) return null;
 
+  // Permission Denied Message Component
+  const PermissionDeniedMessage = ({ feature, permission, description }: {
+    feature: string;
+    permission: string;
+    description: string;
+  }) => (
+    <div style={{
+      maxWidth: '800px',
+      margin: '0 auto',
+      padding: '40px 20px',
+      textAlign: 'center'
+    }}>
+      <div style={{
+        background: 'white',
+        borderRadius: '16px',
+        padding: '60px 40px',
+        boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)',
+        border: '2px solid #ffeaa7'
+      }}>
+        <div style={{
+          fontSize: '4rem',
+          marginBottom: '24px'
+        }}>🔒</div>
+
+        <h2 style={{
+          fontSize: '1.8rem',
+          fontWeight: '700',
+          color: '#2c3e50',
+          marginBottom: '16px'
+        }}>
+          Access Denied
+        </h2>
+
+        <h3 style={{
+          fontSize: '1.3rem',
+          fontWeight: '600',
+          color: '#e17055',
+          marginBottom: '20px'
+        }}>
+          You don't have permission to access {feature}
+        </h3>
+
+        <p style={{
+          fontSize: '1rem',
+          color: '#636e72',
+          marginBottom: '24px',
+          lineHeight: '1.6'
+        }}>
+          {description}
+        </p>
+
+        <div style={{
+          background: '#f8f9fa',
+          padding: '20px',
+          borderRadius: '12px',
+          marginBottom: '24px'
+        }}>
+          <p style={{
+            fontSize: '0.9rem',
+            color: '#636e72',
+            margin: '0',
+            fontWeight: '500'
+          }}>
+            <strong>Required Permission:</strong> {permission}
+          </p>
+        </div>
+
+        <p style={{
+          fontSize: '0.9rem',
+          color: '#74b9ff',
+          margin: '0',
+          fontStyle: 'italic'
+        }}>
+          Contact your administrator to request access to this feature.
+        </p>
+      </div>
+    </div>
+  );
+
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      <ServiceProviderSidebar />
-      <main style={{ flex: 1, padding: "32px", background: "#f8f9fa" }}>
+    <div style={{
+      display: "flex",
+      minHeight: "100vh",
+      background: "#f8f9fa",
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+    }}>
+      <ServiceProviderSidebar userPermissions={userPermissions} />
+      <main style={{
+        flex: 1,
+        marginLeft: "260px",
+        padding: "20px 24px",
+        background: "#f8f9fa",
+        minHeight: "100vh",
+        overflowY: "auto",
+        overflowX: "hidden",
+        maxWidth: "calc(100vw - 260px)"
+      }}>
         {/* Notification Bell */}
         <div style={{
           position: 'fixed',
@@ -294,30 +574,402 @@ export default function ProviderDashboardCatchAll() {
         {/* Home page for service providers */}
         {!section && <ServiceProviderHome user={user} />}
 
+        {/* Profile section */}
+        {section === "profile" && !subsection && <ProfileSection user={user} hasPermission={hasPermission} />}
+
+        {/* Profile Edit section */}
+        {section === "profile" && subsection === "edit" && <ServiceProviderProfile user={user} hasPermission={hasPermission} />}
+
         {/* Incoming requests section */}
-        {section === "requests" && <IncomingRequests user={user} />}
-        
+        {section === "requests" && (
+          hasPermission('view_booking_requests') ? (
+            <IncomingRequests
+              user={user}
+              hasPermission={hasPermission}
+              setSelectedInvoice={setSelectedInvoice}
+              setShowInvoiceModal={setShowInvoiceModal}
+            />
+          ) : (
+            <PermissionDeniedMessage
+              feature="Booking Requests"
+              permission="view_booking_requests"
+              description="You need permission to view incoming booking requests from customers."
+            />
+          )
+        )}
+
         {/* Services section */}
-        {section === "services" && <ServicesSection user={user} />}
+        {section === "services" && (
+          hasPermission('register_for_services') ? (
+            <ServicesSection user={user} />
+          ) : (
+            <PermissionDeniedMessage
+              feature="Service Management"
+              permission="register_for_services"
+              description="You need permission to manage the services you provide."
+            />
+          )
+        )}
 
         {/* Active bookings section */}
-        {section === "active" && <ActiveBookings user={user} />}
+        {section === "active" && (
+          hasPermission('view_active_bookings') ? (
+            <ActiveBookings
+              user={user}
+              setSelectedInvoice={setSelectedInvoice}
+              setShowInvoiceModal={setShowInvoiceModal}
+            />
+          ) : (
+            <PermissionDeniedMessage
+              feature="Active Bookings"
+              permission="view_active_bookings"
+              description="You need permission to view your active and confirmed bookings."
+            />
+          )
+        )}
 
         {/* Previous bookings section */}
-        {section === "previous" && <PreviousBookings user={user} />}
+        {section === "previous" && (
+          hasPermission('view_previous_bookings') ? (
+            <PreviousBookings user={user} />
+          ) : (
+            <PermissionDeniedMessage
+              feature="Previous Bookings"
+              permission="view_previous_bookings"
+              description="You need permission to view your completed and cancelled bookings."
+            />
+          )
+        )}
 
         {/* Ratings section */}
-        {section === "ratings" && <ProviderRatings user={user} />}
+        {section === "ratings" && (
+          hasPermission('view_own_ratings') ? (
+            <ProviderRatings user={user} />
+          ) : (
+            <PermissionDeniedMessage
+              feature="Ratings & Reviews"
+              permission="view_own_ratings"
+              description="You need permission to view ratings and reviews from customers."
+            />
+          )
+        )}
 
         {/* Availability section */}
-        {section === "availability" && <AvailabilityManagement user={user} />}
+        {section === "availability" && (
+          hasPermission('manage_availability') ? (
+            <AvailabilityManagement user={user} />
+          ) : (
+            <PermissionDeniedMessage
+              feature="Availability Management"
+              permission="manage_availability"
+              description="You need permission to manage your availability slots and off days."
+            />
+          )
+        )}
 
         {/* Earnings section */}
-        {section === "earnings" && <EarningsSection user={user} />}
+        {section === "earnings" && (
+          hasPermission('view_earnings') ? (
+            <EarningsSection user={user} />
+          ) : (
+            <PermissionDeniedMessage
+              feature="Earnings & Analytics"
+              permission="view_earnings"
+              description="You need permission to view your earnings and financial analytics."
+            />
+          )
+        )}
 
         {/* Default service provider dashboard */}
         {section && !["requests", "services", "active", "previous", "earnings"].includes(section) && <ServiceProviderDashboard user={user} />}
       </main>
+
+      {/* Invoice Modal */}
+      {showInvoiceModal && selectedInvoice && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '20px',
+            padding: '0',
+            maxWidth: '600px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            position: 'relative'
+          }}>
+            {/* Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+              color: 'white',
+              padding: '30px',
+              borderRadius: '20px 20px 0 0',
+              position: 'relative'
+            }}>
+              <button
+                onClick={() => setShowInvoiceModal(false)}
+                style={{
+                  position: 'absolute',
+                  top: '20px',
+                  right: '20px',
+                  background: 'rgba(255,255,255,0.2)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '40px',
+                  height: '40px',
+                  color: 'white',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ×
+              </button>
+
+              <div style={{ textAlign: 'center' }}>
+                <h2 style={{ margin: '0 0 10px 0', fontSize: '28px', fontWeight: '700' }}>
+                  📄 Service Invoice
+                </h2>
+                <p style={{ margin: 0, opacity: 0.9, fontSize: '16px' }}>
+                  Booking ID: #{selectedInvoice.id}
+                </p>
+              </div>
+            </div>
+
+            {/* Invoice Content */}
+            <div style={{ padding: '30px' }}>
+              {/* Customer Info */}
+              <div style={{
+                background: '#f8f9fa',
+                borderRadius: '12px',
+                padding: '20px',
+                marginBottom: '24px',
+                border: '1px solid #e9ecef'
+              }}>
+                <h3 style={{ margin: '0 0 16px 0', color: '#2c3e50', fontSize: '18px' }}>
+                  👤 Customer Information
+                </h3>
+                <div style={{ fontSize: '16px', color: '#495057' }}>
+                  <strong>{selectedInvoice.customer || 'Customer Name'}</strong>
+                </div>
+              </div>
+
+              {/* Service Details */}
+              <div style={{
+                background: '#f8f9fa',
+                borderRadius: '12px',
+                padding: '20px',
+                marginBottom: '24px',
+                border: '1px solid #e9ecef'
+              }}>
+                <h3 style={{ margin: '0 0 16px 0', color: '#2c3e50', fontSize: '18px' }}>
+                  🛍️ Service Details
+                </h3>
+
+                {isMultiServiceBooking(selectedInvoice) ? (
+                  <div>
+                    <div style={{
+                      background: '#28a745',
+                      color: 'white',
+                      padding: '8px 16px',
+                      borderRadius: '20px',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      display: 'inline-block',
+                      marginBottom: '16px'
+                    }}>
+                      {getServiceCount(selectedInvoice)} Services
+                    </div>
+                    <div style={{ display: 'grid', gap: '12px' }}>
+                      {getServicesList(selectedInvoice).map((service: string, index: number) => (
+                        <div key={index} style={{
+                          background: 'white',
+                          padding: '12px 16px',
+                          borderRadius: '8px',
+                          border: '1px solid #dee2e6',
+                          fontSize: '15px',
+                          color: '#495057',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}>
+                          <span style={{
+                            background: '#28a745',
+                            color: 'white',
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '10px',
+                            fontWeight: 700
+                          }}>
+                            {index + 1}
+                          </span>
+                          {service.trim()}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{
+                    background: 'white',
+                    padding: '16px',
+                    borderRadius: '8px',
+                    border: '1px solid #dee2e6',
+                    fontSize: '16px',
+                    color: '#495057'
+                  }}>
+                    {selectedInvoice.subcategory?.name || 'Service Request'}
+                  </div>
+                )}
+              </div>
+
+              {/* Booking Information */}
+              <div style={{
+                background: '#f8f9fa',
+                borderRadius: '12px',
+                padding: '20px',
+                marginBottom: '24px',
+                border: '1px solid #e9ecef'
+              }}>
+                <h3 style={{ margin: '0 0 16px 0', color: '#2c3e50', fontSize: '18px' }}>
+                  📅 Booking Information
+                </h3>
+                <div style={{ display: 'grid', gap: '12px', fontSize: '15px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#6c757d' }}>Service Date:</span>
+                    <span style={{ fontWeight: '600', color: '#495057' }}>
+                      {new Date(selectedInvoice.service_date).toLocaleDateString()} at {(() => {
+                        // Smart time extraction for invoice
+                        const serviceDate = new Date(selectedInvoice.service_date);
+                        const hours = serviceDate.getHours();
+                        const minutes = serviceDate.getMinutes();
+
+                        // If service_date has meaningful time (not just 00:00), use it
+                        if (hours !== 0 || minutes !== 0) {
+                          return serviceDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+                        } else {
+                          // Try to extract time from notes using enhanced parser
+                          const bookingData = parseBookingNotes(selectedInvoice.notes || '');
+                          return bookingData.timeSlot || 'Not specified';
+                        }
+                      })()}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#6c757d' }}>Status:</span>
+                    <span style={{
+                      fontWeight: '600',
+                      color: selectedInvoice.status === 'completed' ? '#28a745' :
+                             selectedInvoice.status === 'accepted' ? '#007bff' :
+                             selectedInvoice.status === 'cancelled' ? '#dc3545' : '#ffc107',
+                      textTransform: 'capitalize'
+                    }}>
+                      {selectedInvoice.status}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#6c757d' }}>Booking Date:</span>
+                    <span style={{ fontWeight: '600', color: '#495057' }}>
+                      {new Date(selectedInvoice.booking_date).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Summary */}
+              <div style={{
+                background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                borderRadius: '12px',
+                padding: '24px',
+                color: 'white',
+                marginBottom: '24px'
+              }}>
+                <h3 style={{ margin: '0 0 20px 0', fontSize: '20px', fontWeight: '700' }}>
+                  💰 Payment Summary
+                </h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '16px', opacity: 0.9, marginBottom: '4px' }}>
+                      Total Amount
+                    </div>
+                    <div style={{ fontSize: '32px', fontWeight: '700' }}>
+                      ${selectedInvoice.total_price}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '4px' }}>
+                      Payment Status
+                    </div>
+                    <div style={{
+                      background: 'rgba(255,255,255,0.2)',
+                      padding: '8px 16px',
+                      borderRadius: '20px',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      textTransform: 'capitalize'
+                    }}>
+                      {selectedInvoice.payment_status || 'Pending'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                <button
+                  onClick={() => window.print()}
+                  style={{
+                    background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '25px',
+                    padding: '12px 24px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  🖨️ Print Invoice
+                </button>
+                <button
+                  onClick={() => setShowInvoiceModal(false)}
+                  style={{
+                    background: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '25px',
+                    padding: '12px 24px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -362,127 +1014,199 @@ function ServiceProviderHome({ user }: { user: User }) {
 
   if (loading) {
     return (
-      <div style={{ background: 'white', borderRadius: 16, padding: 32, maxWidth: 1200, margin: '0 auto', boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)' }}>
-        <h2 style={{ fontSize: '1.8rem', fontWeight: 700, marginBottom: 24, color: '#2c3e50' }}>Welcome back, {user.username}!</h2>
-        <p>Loading dashboard...</p>
+      <div style={{
+        background: 'rgba(255, 255, 255, 0.95)',
+        borderRadius: 24,
+        padding: 60,
+        maxWidth: 1200,
+        margin: '0 auto',
+        boxShadow: '0 20px 40px rgba(102, 126, 234, 0.15)',
+        backdropFilter: 'blur(20px)',
+        border: '1px solid rgba(255, 255, 255, 0.3)',
+        textAlign: 'center'
+      }}>
+        <div style={{
+          fontSize: '48px',
+          marginBottom: '20px',
+          animation: 'pulse 2s infinite'
+        }}>⏳</div>
+        <h2 style={{ fontSize: '1.8rem', fontWeight: 700, marginBottom: 16, color: '#667eea' }}>
+          Welcome back, {user.username}!
+        </h2>
+        <p style={{ color: '#6c757d', fontSize: '1.1rem' }}>Loading your dashboard...</p>
       </div>
     );
   }
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: 16, padding: 32, marginBottom: 24, color: 'white' }}>
-        <h2 style={{ fontSize: '1.8rem', fontWeight: 700, marginBottom: 8, margin: 0 }}>Welcome back, {user.username}!</h2>
-        <p style={{ margin: 0, opacity: 0.9 }}>Manage your services and track your business performance</p>
+      {/* Compact Header */}
+      <div style={{
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        borderRadius: 12,
+        padding: '20px 24px',
+        marginBottom: 20,
+        color: 'white'
+      }}>
+        <h1 style={{
+          fontSize: '1.8rem',
+          fontWeight: 700,
+          margin: '0 0 8px 0'
+        }}>Welcome back, {user.username}! 👋</h1>
+        <p style={{
+          margin: 0,
+          opacity: 0.9,
+          fontSize: '0.95rem'
+        }}>Manage your services and track performance</p>
       </div>
 
       {/* Stats Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '32px' }}>
-        <div style={{ background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid #e9ecef' }}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-            <div style={{ fontSize: '24px', marginRight: '12px' }}>📥</div>
-            <h3 style={{ margin: 0, color: '#495057', fontSize: '16px' }}>Pending Requests</h3>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+        gap: 16,
+        marginBottom: 20
+      }}>
+
+
+        {/* Pending Requests */}
+        <div style={{
+          background: 'white',
+          padding: '18px',
+          borderRadius: '12px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+          border: '1px solid #e9ecef',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease'
+        }}
+        onClick={() => router.push('/service_provider_dashboard/requests')}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.15)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: '20px', color: '#e74c3c', fontWeight: 700 }}>
+                {stats?.pending_requests_count || 0}
+              </div>
+              <div style={{ fontSize: '14px', color: '#6c757d', fontWeight: 500 }}>
+                Pending Requests
+              </div>
+            </div>
+            <div style={{ fontSize: '24px' }}>📥</div>
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#e74c3c', marginBottom: '8px' }}>
-            {stats?.pending_requests_count || 0}
-          </div>
-          <button
-            style={{ padding: '8px 16px', borderRadius: 6, background: '#e74c3c', color: 'white', border: 'none', cursor: 'pointer', fontSize: '14px', width: '100%' }}
-            onClick={() => router.push('/service_provider_dashboard/requests')}
-          >
-            View Requests
-          </button>
         </div>
 
-        <div style={{ background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid #e9ecef' }}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-            <div style={{ fontSize: '24px', marginRight: '12px' }}>🟢</div>
-            <h3 style={{ margin: 0, color: '#495057', fontSize: '16px' }}>Active Bookings</h3>
+        {/* Active Bookings */}
+        <div style={{
+          background: 'white',
+          padding: '18px',
+          borderRadius: '12px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+          border: '1px solid #e9ecef',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease'
+        }}
+        onClick={() => router.push('/service_provider_dashboard/active')}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.15)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: '20px', color: '#27ae60', fontWeight: 700 }}>
+                {stats?.active_bookings_count || 0}
+              </div>
+              <div style={{ fontSize: '14px', color: '#6c757d', fontWeight: 500 }}>
+                Active Bookings
+              </div>
+            </div>
+            <div style={{ fontSize: '24px' }}>🟢</div>
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#27ae60', marginBottom: '8px' }}>
-            {stats?.active_bookings_count || 0}
-          </div>
-          <button
-            style={{ padding: '8px 16px', borderRadius: 6, background: '#27ae60', color: 'white', border: 'none', cursor: 'pointer', fontSize: '14px', width: '100%' }}
-            onClick={() => router.push('/service_provider_dashboard/active')}
-          >
-            View Active
-          </button>
         </div>
 
-        <div style={{ background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid #e9ecef' }}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-            <div style={{ fontSize: '24px', marginRight: '12px' }}>✅</div>
-            <h3 style={{ margin: 0, color: '#495057', fontSize: '16px' }}>Completed Jobs</h3>
+        {/* Completed Jobs */}
+        <div style={{
+          background: 'white',
+          padding: '18px',
+          borderRadius: '12px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+          border: '1px solid #e9ecef',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease'
+        }}
+        onClick={() => router.push('/service_provider_dashboard/previous')}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.15)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: '20px', color: '#3498db', fontWeight: 700 }}>
+                {stats?.completed_bookings_count || 0}
+              </div>
+              <div style={{ fontSize: '14px', color: '#6c757d', fontWeight: 500 }}>
+                Completed Jobs
+              </div>
+            </div>
+            <div style={{ fontSize: '24px' }}>✅</div>
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#3498db', marginBottom: '8px' }}>
-            {stats?.completed_bookings_count || 0}
-          </div>
-          <button
-            style={{ padding: '8px 16px', borderRadius: 6, background: '#3498db', color: 'white', border: 'none', cursor: 'pointer', fontSize: '14px', width: '100%' }}
-            onClick={() => router.push('/service_provider_dashboard/previous')}
-          >
-            View History
-          </button>
         </div>
 
-        <div style={{ background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid #e9ecef' }}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-            <div style={{ fontSize: '24px', marginRight: '12px' }}>⭐</div>
-            <h3 style={{ margin: 0, color: '#495057', fontSize: '16px' }}>Your Rating</h3>
+        {/* Your Rating */}
+        <div style={{
+          background: 'white',
+          padding: '18px',
+          borderRadius: '12px',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+          border: '1px solid #e9ecef',
+          cursor: 'pointer',
+          transition: 'all 0.2s ease'
+        }}
+        onClick={() => router.push('/service_provider_dashboard/ratings')}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translateY(-2px)';
+          e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.15)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'translateY(0)';
+          e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: '20px', color: '#f39c12', fontWeight: 700 }}>
+                {stats?.average_rating ? `${stats.average_rating}/5` : 'N/A'}
+              </div>
+              <div style={{ fontSize: '14px', color: '#6c757d', fontWeight: 500 }}>
+                Your Rating
+              </div>
+            </div>
+            <div style={{ fontSize: '24px' }}>⭐</div>
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#f39c12', marginBottom: '8px' }}>
-            {stats?.average_rating ? `${stats.average_rating}/5` : 'N/A'}
-          </div>
-          <button
-            style={{ padding: '8px 16px', borderRadius: 6, background: '#f39c12', color: 'white', border: 'none', cursor: 'pointer', fontSize: '14px', width: '100%' }}
-            onClick={() => router.push('/service_provider_dashboard/ratings')}
-          >
-            View Reviews
-          </button>
-        </div>
-
-        <div style={{ background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid #e9ecef' }}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-            <div style={{ fontSize: '24px', marginRight: '12px' }}>📅</div>
-            <h3 style={{ margin: 0, color: '#495057', fontSize: '16px' }}>Availability</h3>
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#667eea', marginBottom: '8px' }}>
-            Manage
-          </div>
-          <button
-            style={{ padding: '8px 16px', borderRadius: 6, background: '#667eea', color: 'white', border: 'none', cursor: 'pointer', fontSize: '14px', width: '100%' }}
-            onClick={() => router.push('/service_provider_dashboard/availability')}
-          >
-            Set Schedule
-          </button>
-        </div>
-
-        <div style={{ background: 'white', padding: '24px', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '1px solid #e9ecef' }}>
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '12px' }}>
-            <div style={{ fontSize: '24px', marginRight: '12px' }}>📊</div>
-            <h3 style={{ margin: 0, color: '#495057', fontSize: '16px' }}>Completion Rate</h3>
-          </div>
-          <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#9b59b6', marginBottom: '8px' }}>
-            {stats?.completion_rate || 0}%
-          </div>
-          <button
-            style={{ padding: '8px 16px', borderRadius: 6, background: '#9b59b6', color: 'white', border: 'none', cursor: 'pointer', fontSize: '14px', width: '100%' }}
-            onClick={() => router.push('/service_provider_dashboard/earnings')}
-          >
-            View Earnings
-          </button>
         </div>
       </div>
 
-      {/* Quick Actions */}
+      {/* Quick Actions Section */}
       <div style={{
-        background: 'linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%)',
-        borderRadius: 20,
+        background: 'rgba(255, 255, 255, 0.95)',
+        borderRadius: 24,
         padding: 40,
-        boxShadow: '0 15px 35px rgba(0,0,0,0.1)',
-        border: '1px solid rgba(102, 126, 234, 0.1)',
+        margin: '40px 0',
+        boxShadow: '0 20px 40px rgba(102, 126, 234, 0.15)',
+        backdropFilter: 'blur(20px)',
+        border: '1px solid rgba(255, 255, 255, 0.3)',
         position: 'relative',
         overflow: 'hidden'
       }}>
@@ -685,7 +1409,12 @@ function ServiceProviderHome({ user }: { user: User }) {
   );
 }
 
-function IncomingRequests({ user }: { user: User }) {
+function IncomingRequests({ user, hasPermission, setSelectedInvoice, setShowInvoiceModal }: {
+  user: User;
+  hasPermission?: (permissionCode: string) => boolean;
+  setSelectedInvoice: (invoice: any) => void;
+  setShowInvoiceModal: (show: boolean) => void;
+}) {
   const [requests, setRequests] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -810,12 +1539,105 @@ function IncomingRequests({ user }: { user: User }) {
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
                   <div>
-                    <h4 style={{ margin: '0 0 8px 0', color: '#2c3e50', fontSize: '18px' }}>
-                      {request.subcategory.name}
-                    </h4>
+                    {isMultiServiceBooking(request) ? (
+                      <div>
+                        {/* Multi-Service Heading */}
+                        <div style={{
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          color: 'white',
+                          padding: '12px 20px',
+                          borderRadius: '10px',
+                          marginBottom: '12px',
+                          textAlign: 'center'
+                        }}>
+                          <h4 style={{
+                            margin: '0',
+                            fontSize: '16px',
+                            fontWeight: 700,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px'
+                          }}>
+                            🛍️ Multi-Service Request
+                          </h4>
+                          <p style={{
+                            margin: '4px 0 0 0',
+                            fontSize: '12px',
+                            opacity: 0.9
+                          }}>
+                            {getServiceCount(request)} Services Requested
+                          </p>
+                        </div>
+
+                        {/* Services List */}
+                        <div style={{ marginBottom: '12px' }}>
+                          <h5 style={{
+                            margin: '0 0 8px 0',
+                            color: '#495057',
+                            fontSize: '14px',
+                            fontWeight: 600
+                          }}>
+                            📋 Services Requested:
+                          </h5>
+                          <div style={{ display: 'grid', gap: '6px' }}>
+                            {getServicesList(request).map((service: string, index: number) => (
+                              <div key={index} style={{
+                                background: '#f8f9fa',
+                                padding: '8px 12px',
+                                borderRadius: '6px',
+                                border: '1px solid #e9ecef',
+                                fontSize: '13px',
+                                color: '#495057',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}>
+                                <span style={{
+                                  background: '#667eea',
+                                  color: 'white',
+                                  width: '18px',
+                                  height: '18px',
+                                  borderRadius: '50%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '10px',
+                                  fontWeight: 700
+                                }}>
+                                  {index + 1}
+                                </span>
+                                <span style={{ fontWeight: 600 }}>
+                                  {service.trim()}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <h4 style={{ margin: '0 0 8px 0', color: '#2c3e50', fontSize: '18px' }}>
+                        🔧 {getServiceDisplayName(request)}
+                      </h4>
+                    )}
                     <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '14px', color: '#6c757d' }}>
                       <span><strong>Customer:</strong> {request.customer}</span>
                       <span><strong>Service Date:</strong> {new Date(request.service_date).toLocaleDateString()}</span>
+                      <span><strong>Time Slot:</strong> {(() => {
+                        // Smart time extraction - try service_date first, then notes
+                        const serviceDate = new Date(request.service_date);
+                        const hours = serviceDate.getHours();
+                        const minutes = serviceDate.getMinutes();
+
+                        // If service_date has meaningful time (not just 00:00), use it
+                        if (hours !== 0 || minutes !== 0) {
+                          return serviceDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+                        } else {
+                          // Try to extract time from notes using enhanced parser
+                          const bookingData = parseBookingNotes(request.notes || '');
+                          return bookingData.timeSlot || 'Not specified';
+                        }
+                      })()}</span>
                       <span><strong>Price:</strong> ${request.total_price}</span>
                     </div>
                   </div>
@@ -831,12 +1653,25 @@ function IncomingRequests({ user }: { user: User }) {
                   </div>
                 </div>
 
-                {request.address && (
-                  <div style={{ marginBottom: '16px', padding: '12px', background: 'white', borderRadius: 8, border: '1px solid #e9ecef' }}>
-                    <strong style={{ color: '#495057' }}>📍 Service Address:</strong>
-                    <p style={{ margin: '4px 0 0 0', color: '#6c757d' }}>{request.address}</p>
-                  </div>
-                )}
+                {(() => {
+                  const bookingData = parseBookingNotes(request.notes || '');
+                  let address = bookingData.address || request.address || (request as any).service_address || (request as any).customer_address;
+
+                  // If no address found, try to extract from notes directly
+                  if (!address && request.notes) {
+                    const directMatch = request.notes.match(/([^,\n\r]+(?:street|st|avenue|ave|road|rd|drive|dr|lane|ln|boulevard|blvd|place|pl|court|ct|way|circle|cir)[^,\n\r]*)/i);
+                    if (directMatch) {
+                      address = directMatch[1].trim();
+                    }
+                  }
+
+                  return address && address !== 'No address provided' ? (
+                    <div style={{ marginBottom: '16px', padding: '12px', background: 'white', borderRadius: 8, border: '1px solid #e9ecef' }}>
+                      <strong style={{ color: '#495057' }}>📍 Service Address:</strong>
+                      <p style={{ margin: '4px 0 0 0', color: '#6c757d' }}>{address}</p>
+                    </div>
+                  ) : null;
+                })()}
 
                 {request.notes && (
                   <div style={{ marginBottom: '16px', padding: '12px', background: 'white', borderRadius: 8, border: '1px solid #e9ecef' }}>
@@ -846,38 +1681,99 @@ function IncomingRequests({ user }: { user: User }) {
                 )}
 
                 <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                  {/* Invoice button */}
                   <button
                     style={{
                       padding: '10px 20px',
                       borderRadius: 6,
-                      background: '#dc3545',
+                      background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
                       color: 'white',
                       border: 'none',
-                      cursor: actionLoading === request.id ? 'not-allowed' : 'pointer',
+                      cursor: 'pointer',
                       fontSize: '14px',
-                      opacity: actionLoading === request.id ? 0.6 : 1
+                      fontWeight: '600'
                     }}
-                    onClick={() => handleDecline(request.id)}
-                    disabled={actionLoading === request.id}
-                  >
-                    {actionLoading === request.id ? 'Processing...' : 'Decline'}
-                  </button>
-                  <button
-                    style={{
-                      padding: '10px 20px',
-                      borderRadius: 6,
-                      background: '#28a745',
-                      color: 'white',
-                      border: 'none',
-                      cursor: actionLoading === request.id ? 'not-allowed' : 'pointer',
-                      fontSize: '14px',
-                      opacity: actionLoading === request.id ? 0.6 : 1
+                    onClick={() => {
+                      setSelectedInvoice(request);
+                      setShowInvoiceModal(true);
                     }}
-                    onClick={() => handleAccept(request.id)}
-                    disabled={actionLoading === request.id}
                   >
-                    {actionLoading === request.id ? 'Processing...' : 'Accept'}
+                    📄 View Invoice
                   </button>
+
+                  {/* Decline button - Check decline_booking_requests permission */}
+                  {hasPermission && hasPermission('decline_booking_requests') ? (
+                    <button
+                      style={{
+                        padding: '10px 20px',
+                        borderRadius: 6,
+                        background: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        cursor: actionLoading === request.id ? 'not-allowed' : 'pointer',
+                        fontSize: '14px',
+                        opacity: actionLoading === request.id ? 0.6 : 1
+                      }}
+                      onClick={() => handleDecline(request.id)}
+                      disabled={actionLoading === request.id}
+                    >
+                      {actionLoading === request.id ? 'Processing...' : 'Decline'}
+                    </button>
+                  ) : (
+                    <button
+                      style={{
+                        padding: '10px 20px',
+                        borderRadius: 6,
+                        background: '#6c757d',
+                        color: 'white',
+                        border: 'none',
+                        cursor: 'not-allowed',
+                        fontSize: '14px',
+                        opacity: 0.6
+                      }}
+                      disabled
+                      title="You don't have permission to decline requests"
+                    >
+                      🔒 Decline
+                    </button>
+                  )}
+
+                  {/* Accept button - Check accept_booking_requests permission */}
+                  {hasPermission && hasPermission('accept_booking_requests') ? (
+                    <button
+                      style={{
+                        padding: '10px 20px',
+                        borderRadius: 6,
+                        background: '#28a745',
+                        color: 'white',
+                        border: 'none',
+                        cursor: actionLoading === request.id ? 'not-allowed' : 'pointer',
+                        fontSize: '14px',
+                        opacity: actionLoading === request.id ? 0.6 : 1
+                      }}
+                      onClick={() => handleAccept(request.id)}
+                      disabled={actionLoading === request.id}
+                    >
+                      {actionLoading === request.id ? 'Processing...' : 'Accept'}
+                    </button>
+                  ) : (
+                    <button
+                      style={{
+                        padding: '10px 20px',
+                        borderRadius: 6,
+                        background: '#6c757d',
+                        color: 'white',
+                        border: 'none',
+                        cursor: 'not-allowed',
+                        fontSize: '14px',
+                        opacity: 0.6
+                      }}
+                      disabled
+                      title="You don't have permission to accept requests"
+                    >
+                      🔒 Accept
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -2157,7 +3053,11 @@ function ServicesSection({ user }: { user: User }) {
   );
 }
 
-function ActiveBookings({ user }: { user: User }) {
+function ActiveBookings({ user, setSelectedInvoice, setShowInvoiceModal }: {
+  user: User;
+  setSelectedInvoice: (invoice: any) => void;
+  setShowInvoiceModal: (show: boolean) => void;
+}) {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -2195,6 +3095,15 @@ function ActiveBookings({ user }: { user: User }) {
 
     if (!confirmCancel) return;
 
+    // Prompt for cancellation reason
+    const cancellationReason = window.prompt(
+      "Please provide a reason for cancellation (optional):",
+      "Service provider unavailable"
+    );
+
+    // If user clicked Cancel on the prompt, don't proceed
+    if (cancellationReason === null) return;
+
     setActionLoading(bookingId);
     const token = localStorage.getItem("access_token");
 
@@ -2204,7 +3113,10 @@ function ActiveBookings({ user }: { user: User }) {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({
+          cancellation_reason: cancellationReason || "Service provider cancelled the booking"
+        })
       });
 
       if (response.ok) {
@@ -2320,12 +3232,105 @@ function ActiveBookings({ user }: { user: User }) {
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
                   <div>
-                    <h4 style={{ margin: '0 0 8px 0', color: '#2c3e50', fontSize: '18px' }}>
-                      {booking.subcategory.name}
-                    </h4>
+                    {isMultiServiceBooking(booking) ? (
+                      <div>
+                        {/* Multi-Service Heading */}
+                        <div style={{
+                          background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                          color: 'white',
+                          padding: '12px 20px',
+                          borderRadius: '10px',
+                          marginBottom: '12px',
+                          textAlign: 'center'
+                        }}>
+                          <h4 style={{
+                            margin: '0',
+                            fontSize: '16px',
+                            fontWeight: 700,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px'
+                          }}>
+                            🛍️ Multi-Service Booking
+                          </h4>
+                          <p style={{
+                            margin: '4px 0 0 0',
+                            fontSize: '12px',
+                            opacity: 0.9
+                          }}>
+                            {getServiceCount(booking)} Services Active
+                          </p>
+                        </div>
+
+                        {/* Services List */}
+                        <div style={{ marginBottom: '12px' }}>
+                          <h5 style={{
+                            margin: '0 0 8px 0',
+                            color: '#495057',
+                            fontSize: '14px',
+                            fontWeight: 600
+                          }}>
+                            📋 Services in Progress:
+                          </h5>
+                          <div style={{ display: 'grid', gap: '6px' }}>
+                            {getServicesList(booking).map((service: string, index: number) => (
+                              <div key={index} style={{
+                                background: '#f8f9fa',
+                                padding: '8px 12px',
+                                borderRadius: '6px',
+                                border: '1px solid #e9ecef',
+                                fontSize: '13px',
+                                color: '#495057',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}>
+                                <span style={{
+                                  background: '#28a745',
+                                  color: 'white',
+                                  width: '18px',
+                                  height: '18px',
+                                  borderRadius: '50%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '10px',
+                                  fontWeight: 700
+                                }}>
+                                  {index + 1}
+                                </span>
+                                <span style={{ fontWeight: 600 }}>
+                                  {service.trim()}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <h4 style={{ margin: '0 0 8px 0', color: '#2c3e50', fontSize: '18px' }}>
+                        🔧 {getServiceDisplayName(booking)}
+                      </h4>
+                    )}
                     <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '14px', color: '#6c757d' }}>
                       <span><strong>Customer:</strong> {booking.customer}</span>
                       <span><strong>Service Date:</strong> {new Date(booking.service_date).toLocaleDateString()}</span>
+                      <span><strong>Time Slot:</strong> {(() => {
+                        // Smart time extraction - try service_date first, then notes
+                        const serviceDate = new Date(booking.service_date);
+                        const hours = serviceDate.getHours();
+                        const minutes = serviceDate.getMinutes();
+
+                        // If service_date has meaningful time (not just 00:00), use it
+                        if (hours !== 0 || minutes !== 0) {
+                          return serviceDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+                        } else {
+                          // Try to extract time from notes using enhanced parser
+                          const bookingData = parseBookingNotes(booking.notes || '');
+                          return bookingData.timeSlot || 'Not specified';
+                        }
+                      })()}</span>
                       <span><strong>Price:</strong> ${booking.total_price}</span>
                     </div>
                   </div>
@@ -2341,12 +3346,25 @@ function ActiveBookings({ user }: { user: User }) {
                   </div>
                 </div>
 
-                {booking.address && (
-                  <div style={{ marginBottom: '16px', padding: '12px', background: 'white', borderRadius: 8, border: '1px solid #e9ecef' }}>
-                    <strong style={{ color: '#495057' }}>📍 Service Address:</strong>
-                    <p style={{ margin: '4px 0 0 0', color: '#6c757d' }}>{booking.address}</p>
-                  </div>
-                )}
+                {(() => {
+                  const bookingData = parseBookingNotes(booking.notes || '');
+                  let address = bookingData.address || booking.address;
+
+                  // If no address found, try to extract from notes directly
+                  if (!address && booking.notes) {
+                    const directMatch = booking.notes.match(/([^,\n\r]+(?:street|st|avenue|ave|road|rd|drive|dr|lane|ln|boulevard|blvd|place|pl|court|ct|way|circle|cir)[^,\n\r]*)/i);
+                    if (directMatch) {
+                      address = directMatch[1].trim();
+                    }
+                  }
+
+                  return address && address !== 'No address provided' ? (
+                    <div style={{ marginBottom: '16px', padding: '12px', background: 'white', borderRadius: 8, border: '1px solid #e9ecef' }}>
+                      <strong style={{ color: '#495057' }}>📍 Service Address:</strong>
+                      <p style={{ margin: '4px 0 0 0', color: '#6c757d' }}>{address}</p>
+                    </div>
+                  ) : null;
+                })()}
 
                 {booking.notes && (
                   <div style={{ marginBottom: '16px', padding: '12px', background: 'white', borderRadius: 8, border: '1px solid #e9ecef' }}>
@@ -2514,7 +3532,7 @@ function ActiveBookings({ user }: { user: User }) {
                         📋 Service Summary
                       </h4>
                       <div style={{ display: 'grid', gap: '8px', fontSize: '14px' }}>
-                        <div><strong>Service:</strong> {booking.subcategory.name}</div>
+                        <div><strong>Service{getServiceCount(booking) > 1 ? 's' : ''}:</strong> {getServiceDisplayName(booking)}</div>
                         <div><strong>Customer:</strong> {booking.customer}</div>
                         <div><strong>Amount:</strong> <span style={{ color: '#28a745', fontWeight: 700, fontSize: '16px' }}>${booking.total_price}</span></div>
                       </div>
@@ -2696,34 +3714,169 @@ function PreviousBookings({ user }: { user: User }) {
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
                   <div>
-                    <h4 style={{ margin: '0 0 8px 0', color: '#2c3e50', fontSize: '18px' }}>
-                      {booking.subcategory.name}
-                    </h4>
+                    {isMultiServiceBooking(booking) ? (
+                      <div>
+                        {/* Multi-Service Heading */}
+                        <div style={{
+                          background: 'linear-gradient(135deg, #6c757d 0%, #495057 100%)',
+                          color: 'white',
+                          padding: '12px 20px',
+                          borderRadius: '10px',
+                          marginBottom: '12px',
+                          textAlign: 'center'
+                        }}>
+                          <h4 style={{
+                            margin: '0',
+                            fontSize: '16px',
+                            fontWeight: 700,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px'
+                          }}>
+                            🛍️ Multi-Service Completed
+                          </h4>
+                          <p style={{
+                            margin: '4px 0 0 0',
+                            fontSize: '12px',
+                            opacity: 0.9
+                          }}>
+                            {getServiceCount(booking)} Services Delivered
+                          </p>
+                        </div>
+
+                        {/* Services List */}
+                        <div style={{ marginBottom: '12px' }}>
+                          <h5 style={{
+                            margin: '0 0 8px 0',
+                            color: '#495057',
+                            fontSize: '14px',
+                            fontWeight: 600
+                          }}>
+                            ✅ Services Completed:
+                          </h5>
+                          <div style={{ display: 'grid', gap: '6px' }}>
+                            {getServicesList(booking).map((service: string, index: number) => (
+                              <div key={index} style={{
+                                background: '#f8f9fa',
+                                padding: '8px 12px',
+                                borderRadius: '6px',
+                                border: '1px solid #e9ecef',
+                                fontSize: '13px',
+                                color: '#495057',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}>
+                                <span style={{
+                                  background: '#28a745',
+                                  color: 'white',
+                                  width: '18px',
+                                  height: '18px',
+                                  borderRadius: '50%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: '10px',
+                                  fontWeight: 700
+                                }}>
+                                  ✓
+                                </span>
+                                <span style={{ fontWeight: 600 }}>
+                                  {service.trim()}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <h4 style={{ margin: '0 0 8px 0', color: '#2c3e50', fontSize: '18px' }}>
+                        ✅ {getServiceDisplayName(booking)}
+                      </h4>
+                    )}
                     <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '14px', color: '#6c757d' }}>
                       <span><strong>Customer:</strong> {booking.customer}</span>
                       <span><strong>Service Date:</strong> {new Date(booking.service_date).toLocaleDateString()}</span>
+                      <span><strong>Time Slot:</strong> {(() => {
+                        // Smart time extraction - try service_date first, then notes
+                        const serviceDate = new Date(booking.service_date);
+                        const hours = serviceDate.getHours();
+                        const minutes = serviceDate.getMinutes();
+
+                        // If service_date has meaningful time (not just 00:00), use it
+                        if (hours !== 0 || minutes !== 0) {
+                          return serviceDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+                        } else {
+                          // Try to extract time from notes using enhanced parser
+                          const bookingData = parseBookingNotes(booking.notes || '');
+                          return bookingData.timeSlot || 'Not specified';
+                        }
+                      })()}</span>
                       <span><strong>Price:</strong> ${booking.total_price}</span>
                       <span><strong>Completed:</strong> {new Date(booking.updated_at).toLocaleDateString()}</span>
                     </div>
                   </div>
-                  <div style={{
-                    background: booking.status === 'completed' ? '#28a745' : '#dc3545',
-                    color: 'white',
-                    padding: '4px 12px',
-                    borderRadius: 20,
-                    fontSize: '12px',
-                    fontWeight: 600
-                  }}>
-                    {booking.status.toUpperCase()}
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{
+                      background: booking.status === 'completed' ? '#28a745' : '#dc3545',
+                      color: 'white',
+                      padding: '4px 12px',
+                      borderRadius: 20,
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      marginBottom: booking.status === 'cancelled' && booking.cancelled_by ? '4px' : '0'
+                    }}>
+                      {booking.status.toUpperCase()}
+                    </div>
+                    {booking.status === 'cancelled' && booking.cancelled_by && (
+                      <div style={{
+                        fontSize: '10px',
+                        color: '#6c757d',
+                        fontStyle: 'italic',
+                        maxWidth: '200px',
+                        textAlign: 'right'
+                      }}>
+                        <div style={{ fontWeight: 600, marginBottom: '2px' }}>
+                          {booking.cancelled_by === 'customer' ? 'Customer cancelled' :
+                           booking.cancelled_by === 'provider' ? 'Provider cancelled' :
+                           booking.cancelled_by === 'system' ? 'Auto-cancelled (expired)' :
+                           'Cancelled'}
+                        </div>
+                        {booking.cancellation_reason && (
+                          <div style={{
+                            fontSize: '9px',
+                            color: '#8e8e8e',
+                            lineHeight: 1.2,
+                            marginTop: '2px'
+                          }}>
+                            {booking.cancellation_reason}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                {booking.address && (
-                  <div style={{ marginBottom: '12px', padding: '12px', background: 'white', borderRadius: 8, border: '1px solid #e9ecef' }}>
-                    <strong style={{ color: '#495057' }}>📍 Service Address:</strong>
-                    <p style={{ margin: '4px 0 0 0', color: '#6c757d' }}>{booking.address}</p>
-                  </div>
-                )}
+                {(() => {
+                  const bookingData = parseBookingNotes(booking.notes || '');
+                  let address = bookingData.address || booking.address;
+
+                  // If no address found, try to extract from notes directly
+                  if (!address && booking.notes) {
+                    const directMatch = booking.notes.match(/([^,\n\r]+(?:street|st|avenue|ave|road|rd|drive|dr|lane|ln|boulevard|blvd|place|pl|court|ct|way|circle|cir)[^,\n\r]*)/i);
+                    if (directMatch) {
+                      address = directMatch[1].trim();
+                    }
+                  }
+
+                  return address && address !== 'No address provided' ? (
+                    <div style={{ marginBottom: '12px', padding: '12px', background: 'white', borderRadius: 8, border: '1px solid #e9ecef' }}>
+                      <strong style={{ color: '#495057' }}>📍 Service Address:</strong>
+                      <p style={{ margin: '4px 0 0 0', color: '#6c757d' }}>{address}</p>
+                    </div>
+                  ) : null;
+                })()}
 
                 {booking.notes && (
                   <div style={{ padding: '12px', background: 'white', borderRadius: 8, border: '1px solid #e9ecef' }}>
@@ -3228,7 +4381,23 @@ function AvailabilityManagement({ user }: { user: User }) {
     }
   };
 
-  const openManageModal = (date: string) => {
+  const openManageModal = async (date: string) => {
+    // Check if this date is marked as off day
+    const isOffDay = offDays.some(offDay => offDay.date === date);
+
+    if (isOffDay) {
+      const confirmConvert = window.confirm(
+        `This date (${date}) is currently marked as an "Off Day". Would you like to remove the off day status and manage individual time slots instead?`
+      );
+
+      if (confirmConvert) {
+        // Remove the off day status first
+        await removeOffDay(date);
+      } else {
+        return; // User cancelled, don't open the modal
+      }
+    }
+
     setSelectedDate(date);
 
     // Get current availability for this date
@@ -3310,6 +4479,12 @@ function AvailabilityManagement({ user }: { user: User }) {
           } else {
             const errorData = await response.json();
             console.error(`- Error response:`, errorData);
+
+            // Show specific validation errors
+            if (response.status === 400 && errorData.error) {
+              console.error(`  Validation error for ${slot.label}: ${errorData.error}`);
+            }
+
             errorCount++;
           }
         } catch (fetchError) {
@@ -3388,6 +4563,44 @@ function AvailabilityManagement({ user }: { user: User }) {
   // Open off days view modal
   const openOffDaysViewModal = () => {
     setShowOffDaysViewModal(true);
+  };
+
+  // Function to remove an off day
+  const removeOffDay = async (date: string) => {
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        alert('Authentication required');
+        return false;
+      }
+
+      console.log(`🗑️ Removing off day for date: ${date}`);
+
+      const response = await fetch(`http://localhost:8000/api/bookings/off-days/`, {
+        method: 'DELETE',
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ date: date })
+      });
+
+      if (response.ok) {
+        console.log('✅ Off day removed successfully');
+        // Refresh the data to reflect changes
+        await loadAvailabilityData();
+        return true;
+      } else {
+        const errorData = await response.json();
+        console.error('❌ Failed to remove off day:', errorData);
+        alert(`Failed to remove off day: ${errorData.error || 'Unknown error'}`);
+        return false;
+      }
+    } catch (error) {
+      console.error('💥 Error removing off day:', error);
+      alert('Network error while removing off day');
+      return false;
+    }
   };
 
   // Get upcoming off days and off slots
@@ -3475,8 +4688,7 @@ function AvailabilityManagement({ user }: { user: User }) {
     }
   };
 
-
-
+  // Helper functions
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -3493,6 +4705,7 @@ function AvailabilityManagement({ user }: { user: User }) {
     });
   };
 
+  // Main component render
   if (loading) {
     return (
       <div style={{ padding: '40px', textAlign: 'center' }}>
@@ -3526,7 +4739,7 @@ function AvailabilityManagement({ user }: { user: User }) {
             textAlign: 'center'
           }}>
             <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>
-              {bookings.filter(b => ['pending', 'accepted'].includes(b.status)).length}
+              {bookings.filter(b => ['pending', 'accepted', 'confirmed'].includes(b.status)).length}
             </div>
             <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Upcoming Bookings</div>
           </div>
@@ -3731,7 +4944,7 @@ function AvailabilityManagement({ user }: { user: User }) {
                           backgroundColor = '#e3f2fd';
                           borderColor = '#2196F3';
                           textColor = '#1976D2';
-                          statusText = `📅 ${status.bookings.length} Booking${status.bookings.length > 1 ? 's' : ''}`;
+                          statusText = `📅 ${status.bookings?.length || 0} Booking${(status.bookings?.length || 0) > 1 ? 's' : ''}`;
                         } else if (status.type === 'available') {
                           backgroundColor = '#e8f5e8';
                           borderColor = '#4CAF50';
@@ -3772,7 +4985,7 @@ function AvailabilityManagement({ user }: { user: User }) {
                             </div>
                             {status.type === 'booked' && (
                               <div style={{ fontSize: '0.7rem', color: '#666' }}>
-                                {status.bookings.map((booking: any, idx: number) => (
+                                {status.bookings?.map((booking: any, idx: number) => (
                                   <div key={idx} style={{ marginBottom: '2px' }}>
                                     {booking.customer} - {booking.service}
                                   </div>
@@ -4274,7 +5487,852 @@ function AvailabilityManagement({ user }: { user: User }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
 
+// Modern Profile Section Component
+function ProfileSection({ user, hasPermission }: { user: User; hasPermission: (permission: string) => boolean }) {
+  const router = useRouter();
+  const [profileData, setProfileData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const token = localStorage.getItem("access_token");
+      if (!token) return;
+
+      try {
+        const response = await fetch("http://localhost:8000/api/auth/me/", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setProfileData(data);
+        }
+      } catch (error) {
+        console.error("Error fetching profile:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{
+        background: 'white',
+        borderRadius: 16,
+        padding: 60,
+        maxWidth: 1200,
+        margin: '0 auto',
+        boxShadow: '0 4px 20px rgba(102, 126, 234, 0.1)',
+        textAlign: 'center'
+      }}>
+        <div style={{
+          fontSize: 48,
+          marginBottom: 20,
+          animation: 'pulse 2s infinite'
+        }}>⏳</div>
+        <div style={{
+          fontSize: 20,
+          color: '#667eea',
+          fontWeight: 600
+        }}>Loading your profile...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Profile Header */}
+      <div style={{
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        borderRadius: 16,
+        padding: 32,
+        maxWidth: 1200,
+        margin: '0 auto 24px',
+        boxShadow: '0 4px 20px rgba(102, 126, 234, 0.2)',
+        color: 'white'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            background: 'rgba(255,255,255,0.2)',
+            width: 80,
+            height: 80,
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '2.5rem',
+            margin: '0 auto 20px',
+            backdropFilter: 'blur(10px)',
+            border: '2px solid rgba(255,255,255,0.3)'
+          }}>
+            👤
+          </div>
+          <h1 style={{
+            fontSize: '2.5rem',
+            fontWeight: 900,
+            marginBottom: 12,
+            color: 'white',
+            textShadow: '0 4px 8px rgba(0,0,0,0.3)'
+          }}>
+            {profileData?.first_name} {profileData?.last_name}
+          </h1>
+          <p style={{
+            color: 'rgba(255,255,255,0.9)',
+            fontSize: '1.2rem',
+            marginBottom: 8,
+            fontWeight: 500
+          }}>
+            Service Provider
+          </p>
+          <p style={{
+            color: 'rgba(255,255,255,0.8)',
+            fontSize: '1rem',
+            marginBottom: 0
+          }}>
+            @{profileData?.username}
+          </p>
+        </div>
+      </div>
+
+      {/* Profile Content */}
+      <div style={{
+        background: 'white',
+        borderRadius: 16,
+        padding: 32,
+        maxWidth: 1200,
+        margin: '0 auto',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
+      }}>
+        <h2 style={{
+          fontSize: '1.5rem',
+          fontWeight: 700,
+          marginBottom: 30,
+          color: '#2c3e50',
+          textAlign: 'center'
+        }}>Profile Information</h2>
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+          gap: 24
+        }}>
+          {/* Personal Information */}
+          <div style={{
+            background: '#f8f9fa',
+            borderRadius: 12,
+            padding: 24,
+            border: '2px solid #e9ecef'
+          }}>
+            <h3 style={{
+              fontSize: '1.2rem',
+              fontWeight: 600,
+              marginBottom: 20,
+              color: '#495057',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}>
+              📋 Personal Details
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <strong style={{ color: '#6c757d' }}>Email:</strong>
+                <div style={{ marginTop: 4, color: '#2c3e50' }}>{profileData?.email}</div>
+              </div>
+              <div>
+                <strong style={{ color: '#6c757d' }}>Phone:</strong>
+                <div style={{ marginTop: 4, color: '#2c3e50' }}>{profileData?.phone || 'Not provided'}</div>
+              </div>
+              <div>
+                <strong style={{ color: '#6c757d' }}>Address:</strong>
+                <div style={{ marginTop: 4, color: '#2c3e50' }}>{profileData?.address || 'Not provided'}</div>
+              </div>
+              <div>
+                <strong style={{ color: '#6c757d' }}>User Type:</strong>
+                <div style={{ marginTop: 4, color: '#2c3e50', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    padding: '4px 8px',
+                    borderRadius: 6,
+                    fontSize: '12px',
+                    fontWeight: 600
+                  }}>
+                    {profileData?.user_type || user.user_type}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <strong style={{ color: '#6c757d' }}>Role:</strong>
+                <div style={{ marginTop: 4, color: '#2c3e50', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    background: '#28a745',
+                    color: 'white',
+                    padding: '4px 8px',
+                    borderRadius: 6,
+                    fontSize: '12px',
+                    fontWeight: 600
+                  }}>
+                    {profileData?.role || user.role}
+                  </span>
+                  <span style={{ fontSize: '12px', color: '#6c757d', fontStyle: 'italic' }}>
+                    (Determines permissions)
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Professional Information */}
+          <div style={{
+            background: '#f8f9fa',
+            borderRadius: 12,
+            padding: 24,
+            border: '2px solid #e9ecef'
+          }}>
+            <h3 style={{
+              fontSize: '1.2rem',
+              fontWeight: 600,
+              marginBottom: 20,
+              color: '#495057',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}>
+              🛠️ Professional Info
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <strong style={{ color: '#6c757d' }}>Experience:</strong>
+                <div style={{ marginTop: 4, color: '#2c3e50' }}>
+                  {profileData?.experience_years ? `${profileData.experience_years} years` : 'Not specified'}
+                </div>
+              </div>
+              <div>
+                <strong style={{ color: '#6c757d' }}>Specializations:</strong>
+                <div style={{ marginTop: 4, color: '#2c3e50' }}>
+                  {profileData?.specializations || 'Not specified'}
+                </div>
+              </div>
+              <div>
+                <strong style={{ color: '#6c757d' }}>Bio:</strong>
+                <div style={{ marginTop: 4, color: '#2c3e50', lineHeight: 1.5 }}>
+                  {profileData?.bio || 'No bio provided'}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Edit Profile Button */}
+        {hasPermission('edit_own_profile') && (
+          <div style={{ textAlign: 'center', marginTop: 30 }}>
+            <button
+              onClick={() => router.push('/service_provider_dashboard/profile/edit')}
+              style={{
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                border: 'none',
+                padding: '14px 28px',
+                borderRadius: 12,
+                fontSize: '16px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                boxShadow: '0 4px 15px rgba(102, 126, 234, 0.3)',
+                transition: 'all 0.3s ease'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(102, 126, 234, 0.4)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 15px rgba(102, 126, 234, 0.3)';
+              }}
+            >
+              ✏️ Edit Profile
+            </button>
+          </div>
+        )}
+
+        {/* Permission Info */}
+        {!hasPermission('edit_own_profile') && (
+          <div style={{
+            marginTop: 24,
+            padding: 16,
+            background: '#fff3cd',
+            borderRadius: 8,
+            border: '1px solid #ffeaa7',
+            textAlign: 'center'
+          }}>
+            <p style={{ margin: 0, color: '#856404' }}>
+              ⚠️ You don't have permission to edit your profile. Contact your administrator.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Service Provider Profile Component (Legacy - keeping for edit functionality)
+function ServiceProviderProfile({ user, hasPermission }: { user: User; hasPermission: (permission: string) => boolean }) {
+  const [profileData, setProfileData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [formData, setFormData] = useState({
+    username: '',
+    email: '',
+    first_name: '',
+    last_name: '',
+    phone: '',
+    address: '',
+    bio: '',
+    experience_years: '',
+    specializations: ''
+  });
+  const [passwordData, setPasswordData] = useState({
+    oldPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  });
+
+  // Check permissions
+  const canViewProfile = hasPermission('view_own_profile');
+  const canEditProfile = hasPermission('edit_own_profile');
+
+  useEffect(() => {
+    if (!canViewProfile) {
+      setLoading(false);
+      return;
+    }
+    loadProfileData();
+  }, [canViewProfile]);
+
+  const loadProfileData = async () => {
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) return;
+
+      const response = await fetch("http://localhost:8000/api/auth/me/", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setProfileData(data);
+        setFormData({
+          username: data.username || '',
+          email: data.email || '',
+          first_name: data.first_name || '',
+          last_name: data.last_name || '',
+          phone: data.phone || '',
+          address: data.address || '',
+          bio: data.bio || '',
+          experience_years: data.experience_years || '',
+          specializations: data.specializations || ''
+        });
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!canEditProfile) {
+      alert('You do not have permission to edit your profile. Contact your administrator to grant "Edit Own Profile" permission.');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("access_token");
+      if (!token) return;
+
+      // Prepare update data
+      const updateData: any = { ...formData };
+
+      // Add password data if changing password
+      if (showChangePassword) {
+        if (!passwordData.oldPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+          alert('❌ Please fill in all password fields');
+          return;
+        }
+        if (passwordData.newPassword !== passwordData.confirmPassword) {
+          alert('❌ New passwords do not match');
+          return;
+        }
+        if (passwordData.newPassword.length < 6) {
+          alert('❌ New password must be at least 6 characters long');
+          return;
+        }
+
+        updateData.old_password = passwordData.oldPassword;
+        updateData.new_password = passwordData.newPassword;
+      }
+
+      const response = await fetch("http://localhost:8000/api/auth/me/update/", {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updateData),
+      });
+
+      if (response.ok) {
+        alert('✅ Profile updated successfully!');
+        setEditing(false);
+        setShowChangePassword(false);
+        setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+        loadProfileData();
+      } else {
+        const error = await response.json();
+        alert(`❌ Failed to update profile: ${error.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      alert('❌ Network error occurred while updating profile');
+    }
+  };
+
+  // Permission denied view
+  if (!canViewProfile) {
+    return (
+      <div style={{
+        padding: '40px',
+        textAlign: 'center',
+        background: '#fff3cd',
+        border: '1px solid #ffeaa7',
+        borderRadius: '12px',
+        margin: '20px'
+      }}>
+        <div style={{ fontSize: '48px', marginBottom: '20px' }}>🔒</div>
+        <h2 style={{ color: '#856404', marginBottom: '16px' }}>Access Denied</h2>
+        <p style={{ color: '#856404', fontSize: '16px', lineHeight: '1.5' }}>
+          You do not have permission to view your profile.<br />
+          Contact your administrator to grant "View Own Profile" permission.
+        </p>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center' }}>
+        <div style={{ fontSize: '24px' }}>⏳ Loading profile...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: '32px' }}>
+      {/* Header */}
+      <div style={{
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        borderRadius: '20px',
+        padding: '30px',
+        color: 'white',
+        marginBottom: '30px'
+      }}>
+        <h2 style={{ margin: '0 0 20px 0', fontSize: '2rem', fontWeight: 700 }}>
+          👤 My Profile
+        </h2>
+        <p style={{ opacity: 0.9, fontSize: '1.1rem', margin: '0' }}>
+          Manage your personal information and service provider details
+        </p>
+      </div>
+
+      {/* Profile Content */}
+      <div style={{
+        background: 'white',
+        borderRadius: '16px',
+        padding: '32px',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+        border: '1px solid #e9ecef'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+          <h3 style={{ margin: 0, fontSize: '1.8rem', color: '#2c3e50', fontWeight: 700 }}>
+            👤 Profile Information
+          </h3>
+          <div style={{ display: 'flex', gap: '12px' }}>
+            {canEditProfile && (
+              <>
+                <button
+                  onClick={() => editing ? handleSave() : setEditing(true)}
+                  style={{
+                    background: editing ? 'linear-gradient(135deg, #28a745, #20c997)' : 'linear-gradient(135deg, #007bff, #0056b3)',
+                    color: 'white',
+                    border: 'none',
+                    padding: '14px 28px',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    fontSize: '15px',
+                    fontWeight: 600,
+                    boxShadow: '0 4px 15px rgba(0,123,255,0.3)',
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  {editing ? '💾 Save Changes' : '✏️ Edit Profile'}
+                </button>
+
+                {editing && (
+                  <>
+                    <button
+                      onClick={() => setShowChangePassword(!showChangePassword)}
+                      style={{
+                        background: showChangePassword
+                          ? 'linear-gradient(135deg, #ffc107, #e0a800)'
+                          : 'linear-gradient(135deg, #17a2b8, #138496)',
+                        color: 'white',
+                        border: 'none',
+                        padding: '14px 28px',
+                        borderRadius: '12px',
+                        cursor: 'pointer',
+                        fontSize: '15px',
+                        fontWeight: 600,
+                        boxShadow: '0 4px 15px rgba(23,162,184,0.3)',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      🔐 {showChangePassword ? 'Hide Password' : 'Change Password'}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setEditing(false);
+                        setShowChangePassword(false);
+                        setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
+                        loadProfileData();
+                      }}
+                      style={{
+                        background: 'linear-gradient(135deg, #6c757d, #5a6268)',
+                        color: 'white',
+                        border: 'none',
+                        padding: '14px 28px',
+                        borderRadius: '12px',
+                        cursor: 'pointer',
+                        fontSize: '15px',
+                        fontWeight: 600,
+                        boxShadow: '0 4px 15px rgba(108,117,125,0.3)',
+                        transition: 'all 0.3s ease'
+                      }}
+                    >
+                      ❌ Cancel
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Profile Fields */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+          <ProfileField
+            label="Username"
+            value={formData.username}
+            editing={editing}
+            onChange={(value) => setFormData({...formData, username: value})}
+            disabled={true} // Username usually can't be changed
+          />
+          <ProfileField
+            label="Email"
+            value={formData.email}
+            editing={editing}
+            onChange={(value) => setFormData({...formData, email: value})}
+            type="email"
+          />
+          <ProfileField
+            label="First Name"
+            value={formData.first_name}
+            editing={editing}
+            onChange={(value) => setFormData({...formData, first_name: value})}
+          />
+          <ProfileField
+            label="Last Name"
+            value={formData.last_name}
+            editing={editing}
+            onChange={(value) => setFormData({...formData, last_name: value})}
+          />
+          <ProfileField
+            label="Phone"
+            value={formData.phone}
+            editing={editing}
+            onChange={(value) => setFormData({...formData, phone: value})}
+            type="tel"
+          />
+          <ProfileField
+            label="Address"
+            value={formData.address}
+            editing={editing}
+            onChange={(value) => setFormData({...formData, address: value})}
+          />
+        </div>
+
+        {/* Bio and Experience */}
+        <div style={{ marginTop: '32px' }}>
+          <h4 style={{ marginBottom: '20px', color: '#2c3e50' }}>Professional Information</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
+            <ProfileField
+              label="Bio"
+              value={formData.bio}
+              editing={editing}
+              onChange={(value) => setFormData({...formData, bio: value})}
+              multiline={true}
+            />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+              <ProfileField
+                label="Years of Experience"
+                value={formData.experience_years}
+                editing={editing}
+                onChange={(value) => setFormData({...formData, experience_years: value})}
+                type="number"
+              />
+              <ProfileField
+                label="Specializations"
+                value={formData.specializations}
+                editing={editing}
+                onChange={(value) => setFormData({...formData, specializations: value})}
+                placeholder="e.g., Plumbing, Electrical, Carpentry"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Change Password Section */}
+        {editing && showChangePassword && (
+          <div style={{
+            marginTop: '32px',
+            padding: '24px',
+            background: 'linear-gradient(135deg, #f8f9fa, #e9ecef)',
+            borderRadius: '16px',
+            border: '2px solid #dee2e6'
+          }}>
+            <h4 style={{
+              marginBottom: '20px',
+              color: '#2c3e50',
+              fontSize: '1.3rem',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              🔐 Change Password
+            </h4>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+              <div>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontWeight: 600,
+                  color: '#495057'
+                }}>
+                  Current Password *
+                </label>
+                <input
+                  type="password"
+                  value={passwordData.oldPassword}
+                  onChange={(e) => setPasswordData({...passwordData, oldPassword: e.target.value})}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: '2px solid #dee2e6',
+                    borderRadius: '8px',
+                    fontSize: '15px',
+                    transition: 'border-color 0.3s ease',
+                    outline: 'none'
+                  }}
+                  placeholder="Enter your current password"
+                />
+              </div>
+
+              <div>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontWeight: 600,
+                  color: '#495057'
+                }}>
+                  New Password *
+                </label>
+                <input
+                  type="password"
+                  value={passwordData.newPassword}
+                  onChange={(e) => setPasswordData({...passwordData, newPassword: e.target.value})}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: '2px solid #dee2e6',
+                    borderRadius: '8px',
+                    fontSize: '15px',
+                    transition: 'border-color 0.3s ease',
+                    outline: 'none'
+                  }}
+                  placeholder="Enter new password (min 6 characters)"
+                />
+              </div>
+
+              <div>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '8px',
+                  fontWeight: 600,
+                  color: '#495057'
+                }}>
+                  Confirm New Password *
+                </label>
+                <input
+                  type="password"
+                  value={passwordData.confirmPassword}
+                  onChange={(e) => setPasswordData({...passwordData, confirmPassword: e.target.value})}
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    border: `2px solid ${passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword ? '#dc3545' : '#dee2e6'}`,
+                    borderRadius: '8px',
+                    fontSize: '15px',
+                    transition: 'border-color 0.3s ease',
+                    outline: 'none'
+                  }}
+                  placeholder="Confirm your new password"
+                />
+                {passwordData.newPassword && passwordData.confirmPassword && passwordData.newPassword !== passwordData.confirmPassword && (
+                  <div style={{
+                    color: '#dc3545',
+                    fontSize: '14px',
+                    marginTop: '4px',
+                    fontWeight: 500
+                  }}>
+                    ❌ Passwords do not match
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{
+              marginTop: '16px',
+              padding: '12px 16px',
+              background: 'rgba(13, 202, 240, 0.1)',
+              borderRadius: '8px',
+              border: '1px solid rgba(13, 202, 240, 0.3)'
+            }}>
+              <div style={{ fontSize: '14px', color: '#0dcaf0', fontWeight: 500 }}>
+                💡 Password Requirements:
+              </div>
+              <ul style={{
+                margin: '8px 0 0 0',
+                paddingLeft: '20px',
+                fontSize: '13px',
+                color: '#6c757d'
+              }}>
+                <li>At least 6 characters long</li>
+                <li>Must match the confirmation field</li>
+                <li>Current password is required for verification</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* Permission Info */}
+        {!canEditProfile && (
+          <div style={{
+            marginTop: '24px',
+            padding: '16px',
+            background: '#fff3cd',
+            border: '1px solid #ffeaa7',
+            borderRadius: '8px',
+            color: '#856404'
+          }}>
+            <strong>ℹ️ Note:</strong> You can view your profile but cannot edit it. Contact your administrator to grant "Edit Own Profile" permission.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Profile Field Component
+function ProfileField({
+  label,
+  value,
+  editing,
+  onChange,
+  type = 'text',
+  disabled = false,
+  multiline = false,
+  placeholder = ''
+}: {
+  label: string;
+  value: string;
+  editing: boolean;
+  onChange: (value: string) => void;
+  type?: string;
+  disabled?: boolean;
+  multiline?: boolean;
+  placeholder?: string;
+}) {
+  const baseStyle = {
+    width: '100%',
+    padding: '12px',
+    border: editing && !disabled ? '2px solid #007bff' : '1px solid #ddd',
+    borderRadius: '8px',
+    fontSize: '14px',
+    background: disabled ? '#f8f9fa' : 'white',
+    color: disabled ? '#6c757d' : '#333',
+    cursor: disabled ? 'not-allowed' : 'text',
+  };
+
+  const textareaStyle = {
+    ...baseStyle,
+    resize: 'vertical' as const,
+    minHeight: '80px'
+  };
+
+  const inputStyle = {
+    ...baseStyle,
+    minHeight: 'auto'
+  };
+
+  return (
+    <div>
+      <label style={{
+        display: 'block',
+        marginBottom: '8px',
+        fontWeight: 600,
+        color: '#2c3e50',
+        fontSize: '14px'
+      }}>
+        {label}
+      </label>
+      {multiline ? (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={!editing || disabled}
+          placeholder={placeholder}
+          style={textareaStyle}
+        />
+      ) : (
+        <input
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={!editing || disabled}
+          placeholder={placeholder}
+          style={inputStyle}
+        />
+      )}
     </div>
   );
 }

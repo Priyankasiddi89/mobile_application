@@ -185,6 +185,10 @@ class BookingDetailView(APIView):
         new_status = request.data.get('status')
         if new_status == 'cancelled':
             booking.status = 'cancelled'
+            booking.cancelled_by = 'customer'  # Track that customer cancelled
+            # Get cancellation reason from request, or use default
+            cancellation_reason = request.data.get('cancellation_reason', 'Customer requested cancellation')
+            booking.cancellation_reason = cancellation_reason
             booking.save()
             serializer = BookingSerializer(booking)
             return Response(serializer.data)

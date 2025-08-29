@@ -54,6 +54,32 @@ interface Service {
   price: number;
 }
 
+interface CartItem {
+  id: string;
+  subcategory_id: number;
+  subcategory_name: string;
+  provider_id: string;
+  provider_name: string;
+  price: number;
+  description: string;
+  category_name: string;
+  added_at: string;
+  booking_details?: {
+    selected_date: string;
+    selected_time: string;
+    address: string;
+    notes: string;
+  };
+}
+
+interface Cart {
+  items: CartItem[];
+  provider_id: string | null;
+  provider_name: string | null;
+  total_price: number;
+  total_items: number;
+}
+
 interface Booking {
   id: number;
   service_name: string;
@@ -63,7 +89,7 @@ interface Booking {
   price: number;
 }
 
-function EndUserSidebar({ user, hasPermission, permissionsLoading }: { user: User; hasPermission: (permission: string) => boolean; permissionsLoading: boolean }) {
+function EndUserSidebar({ user, hasPermission, permissionsLoading, cartItemCount }: { user: User; hasPermission: (permission: string) => boolean; permissionsLoading: boolean; cartItemCount: number }) {
   const router = useRouter();
   const params = useParams();
   const section = Array.isArray(params.section) ? params.section[0] : params.section;
@@ -80,6 +106,12 @@ function EndUserSidebar({ user, hasPermission, permissionsLoading }: { user: Use
       title: "Book a Service",
       path: "/end_user_dashboard/services",
       icon: "🔧",
+      permission: "create_bookings"
+    },
+    {
+      title: "Cart",
+      path: "/end_user_dashboard/cart",
+      icon: "🛒",
       permission: "create_bookings"
     },
     {
@@ -113,14 +145,14 @@ function EndUserSidebar({ user, hasPermission, permissionsLoading }: { user: Use
     }}>
       {/* Logo/Brand */}
       <div style={{ textAlign: 'center', marginBottom: 40 }}>
-        <div style={{ 
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
-          width: 70, 
-          height: 70, 
-          borderRadius: '50%', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
+        <div style={{
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          width: 70,
+          height: 70,
+          borderRadius: '50%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           fontSize: '2.5rem',
           margin: '0 auto 20px',
           boxShadow: '0 8px 25px rgba(0,0,0,0.2)',
@@ -209,8 +241,29 @@ function EndUserSidebar({ user, hasPermission, permissionsLoading }: { user: Use
                   }
                 }}
               >
-                <span style={{ fontSize: '1.3rem', marginRight: 15 }}>{item.icon}</span>
-                {item.title}
+                <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                  <span style={{ fontSize: '1.3rem', marginRight: 15 }}>{item.icon}</span>
+                  {item.title}
+                </div>
+
+                {/* Cart Badge */}
+                {item.title === 'Cart' && cartItemCount > 0 && (
+                  <span style={{
+                    background: '#ff4757',
+                    color: 'white',
+                    borderRadius: '50%',
+                    width: '24px',
+                    height: '24px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    marginLeft: '8px'
+                  }}>
+                    {cartItemCount > 99 ? '99+' : cartItemCount}
+                  </span>
+                )}
               </button>
             </li>
           ))}
@@ -264,6 +317,7 @@ export default function UserDashboardCatchAll() {
   const [loading, setLoading] = useState(true);
   const [userPermissions, setUserPermissions] = useState<UserPermissions>({});
   const [permissionsLoading, setPermissionsLoading] = useState(true);
+  const [cartItemCount, setCartItemCount] = useState(0);
   const router = useRouter();
   const params = useParams();
   const section = Array.isArray(params.section) ? params.section[0] : params.section;
@@ -379,6 +433,41 @@ export default function UserDashboardCatchAll() {
       });
   }, [router]);
 
+  // Load cart count from localStorage
+  const loadCartCount = () => {
+    const savedCart = localStorage.getItem('userCart');
+    if (savedCart) {
+      try {
+        const cart = JSON.parse(savedCart);
+        setCartItemCount(cart.items?.length || 0);
+      } catch (error) {
+        console.error('Error loading cart count:', error);
+        setCartItemCount(0);
+      }
+    } else {
+      setCartItemCount(0);
+    }
+  };
+
+  // Load cart count on component mount and listen for updates
+  useEffect(() => {
+    loadCartCount();
+
+    const handleStorageChange = () => {
+      loadCartCount();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    // Also listen for custom cart update events
+    window.addEventListener('cartUpdated', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('cartUpdated', handleStorageChange);
+    };
+  }, []);
+
   if (loading || permissionsLoading) {
     return (
       <div style={{ textAlign: "center", marginTop: "50px", background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -394,24 +483,29 @@ export default function UserDashboardCatchAll() {
   if (!user) return null;
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      <EndUserSidebar user={user} hasPermission={hasPermission} permissionsLoading={permissionsLoading} />
-      <main style={{ flex: 1, padding: "32px", background: "#f8f9fa", marginLeft: "280px" }}>
+    <div style={{
+      display: "flex",
+      minHeight: "100vh",
+      background: "#f8f9fa",
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+    }}>
+      <EndUserSidebar user={user} hasPermission={hasPermission} permissionsLoading={permissionsLoading} cartItemCount={cartItemCount} />
+      <main style={{
+        flex: 1,
+        marginLeft: "280px",
+        padding: "24px 32px",
+        background: "#f8f9fa",
+        minHeight: "100vh",
+        overflowY: "auto",
+        overflowX: "hidden",
+        maxWidth: "calc(100vw - 280px)"
+      }}>
         {/* Home page for end users */}
         {!section && <MainDashboard user={user} />}
         
         {/* Profile section route */}
         {section === "profile" && (
           <ProfileSection user={user} hasPermission={hasPermission} />
-        )}
-
-        {/* Bookings section - check permission */}
-        {section === "bookings" && (
-          permissionsLoading || hasPermission('view_own_bookings') ? (
-            <BookingsSection user={user} />
-          ) : (
-            <PermissionDenied section="Bookings" permission="View Own Bookings" />
-          )
         )}
 
         {/* Requests section - check permission */}
@@ -431,12 +525,21 @@ export default function UserDashboardCatchAll() {
             <PermissionDenied section="Book a Service" permission="Create Bookings" />
           )
         )}
-        
+
+        {/* Cart section - check permission */}
+        {section === "cart" && (
+          permissionsLoading || hasPermission('create_bookings') ? (
+            <CartSection user={user} />
+          ) : (
+            <PermissionDenied section="Cart" permission="Create Bookings" />
+          )
+        )}
+
         {/* Notifications section */}
         {section === "notifications" && <NotificationsSection user={user} />}
-        
+
         {/* Default end user dashboard */}
-        {section && section !== "profile" && section !== "bookings" && section !== "requests" && section !== "services" && section !== "notifications" && <EndUserDashboard user={user} />}
+        {section && section !== "profile" && section !== "bookings" && section !== "requests" && section !== "services" && section !== "notifications" && section !== "cart" && <EndUserDashboard user={user} />}
       </main>
     </div>
   );
@@ -666,10 +769,37 @@ function ProfileSection({ user, hasPermission }: { user: User; hasPermission: (p
             <strong>Username:</strong> {user.username}
           </div>
           <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
-            <strong>User Type:</strong> {user.user_type}
+            <strong>User Type:</strong>
+            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{
+                background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                color: 'white',
+                padding: '6px 12px',
+                borderRadius: 8,
+                fontSize: '14px',
+                fontWeight: 600
+              }}>
+                {user.user_type}
+              </span>
+            </div>
           </div>
           <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
-            <strong>Role:</strong> {user.role}
+            <strong>Role:</strong>
+            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{
+                background: '#28a745',
+                color: 'white',
+                padding: '6px 12px',
+                borderRadius: 8,
+                fontSize: '14px',
+                fontWeight: 600
+              }}>
+                {user.role}
+              </span>
+              <span style={{ fontSize: '12px', color: '#6c757d', fontStyle: 'italic' }}>
+                (Determines permissions)
+              </span>
+            </div>
           </div>
         </div>
       ) : (
@@ -1036,40 +1166,17 @@ function MainDashboard({ user }: { user: User }) {
   console.log('🏗️ Final categoryData structure:', categoryData);
 
   return (
-    <div style={{ 
-      background: 'linear-gradient(135deg,rgb(73, 100, 218) 0%, #764ba2 100%)', 
-      borderRadius: 25, 
-      padding: 30, 
-      maxWidth: 1200, 
-      margin: '0 auto', 
-      boxShadow: '0 25px 50px rgba(0,0,0,0.15)',
-      height: 'calc(100vh - 100px)',
-      position: 'relative',
-      overflow: 'hidden'
-    }}>
-      {/* Background decoration */}
+    <div>
       <div style={{
-        position: 'absolute',
-        top: -50,
-        right: -50,
-        width: 200,
-        height: 200,
-        background: 'rgba(255,255,255,0.1)',
-        borderRadius: '50%',
-        filter: 'blur(40px)'
-      }}></div>
-      <div style={{
-        position: 'absolute',
-        bottom: -30,
-        left: -30,
-        width: 150,
-        height: 150,
-        background: 'rgba(255,255,255,0.08)',
-        borderRadius: '50%',
-        filter: 'blur(30px)'
-      }}></div>
-
-      <div style={{ textAlign: 'center', marginBottom: 30, position: 'relative', zIndex: 1 }}>
+        background: 'linear-gradient(135deg,rgb(18, 49, 103) 0%, #2a5298 100%)',
+        borderRadius: 16,
+        padding: 32,
+        maxWidth: 1200,
+        margin: '0 auto 24px',
+        boxShadow: '0 4px 20px rgba(18, 49, 103, 0.2)',
+        color: 'white'
+      }}>
+      <div style={{ textAlign: 'center', marginBottom: 30 }}>
         <div style={{
           background: 'rgba(255,255,255,0.2)',
           width: 60,
@@ -1085,38 +1192,37 @@ function MainDashboard({ user }: { user: User }) {
         }}>
           👋
         </div>
-        <h1 style={{ 
-          fontSize: '2.5rem', 
-          fontWeight: 900, 
-          marginBottom: 12, 
+        <h1 style={{
+          fontSize: '2.5rem',
+          fontWeight: 900,
+          marginBottom: 12,
           color: 'white',
           textShadow: '0 4px 8px rgba(0,0,0,0.3)',
           background: 'linear-gradient(45deg, #fff, #f0f0f0)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent'
         }}>Welcome Back!</h1>
-        <p style={{ 
-          color: 'rgba(255,255,255,0.9)', 
-          fontSize: '1rem', 
+        <p style={{
+          color: 'rgba(255,255,255,0.9)',
+          fontSize: '1rem',
           marginBottom: 0,
           fontWeight: 500
         }}>What would you like to do today?</p>
       </div>
 
       {/* Main Options */}
-      <div style={{ marginBottom: 30, position: 'relative', zIndex: 1 }}>
-        <h2 style={{ 
-          fontSize: '1.8rem', 
-          fontWeight: 800, 
-          marginBottom: 20, 
-          color: 'white', 
-          textAlign: 'center',
-          textShadow: '0 2px 4px rgba(0,0,0,0.3)'
+      <div style={{ marginBottom: 30 }}>
+        <h2 style={{
+          fontSize: '1.5rem',
+          fontWeight: 700,
+          marginBottom: 20,
+          color: 'white',
+          textAlign: 'center'
         }}>Quick Actions</h2>
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
-          gap: 20 
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+          gap: 15
         }}>
           {mainOptions.map((option, index) => (
             <div
@@ -1124,36 +1230,32 @@ function MainDashboard({ user }: { user: User }) {
               onClick={option.onClick}
               style={{
                 background: option.gradient,
-                borderRadius: 20,
-                padding: 25,
+                borderRadius: 12,
+                padding: 20,
                 cursor: 'pointer',
-                transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                boxShadow: '0 15px 35px rgba(0,0,0,0.2)',
-                border: '1px solid rgba(255,255,255,0.2)',
-                position: 'relative',
-                overflow: 'hidden',
-                backdropFilter: 'blur(10px)'
+                transition: 'all 0.3s ease',
+                boxShadow: '0 4px 15px rgba(0,0,0,0.1)',
+                border: '1px solid rgba(255,255,255,0.2)'
               }}
               onMouseEnter={e => {
-                e.currentTarget.style.transform = 'translateY(-12px) scale(1.02)';
-                e.currentTarget.style.boxShadow = '0 25px 50px rgba(0,0,0,0.3)';
+                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.2)';
               }}
               onMouseLeave={e => {
-                e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                e.currentTarget.style.boxShadow = '0 15px 35px rgba(0,0,0,0.2)';
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.1)';
               }}
             >
-              <div style={{ 
-                background: 'rgba(255,255,255,0.25)', 
-                width: 60, 
-                height: 60, 
-                borderRadius: '50%', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                fontSize: '2rem',
-                marginBottom: 15,
-                backdropFilter: 'blur(10px)',
+              <div style={{
+                background: 'rgba(255,255,255,0.2)',
+                width: 50,
+                height: 50,
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '1.5rem',
+                marginBottom: 12,
                 border: '1px solid rgba(255,255,255,0.3)'
               }}>
                 {option.icon}
@@ -1180,7 +1282,16 @@ function MainDashboard({ user }: { user: User }) {
           ))}
         </div>
       </div>
+    </div>
 
+    <div style={{
+      background: 'white',
+      borderRadius: 16,
+      padding: 32,
+      maxWidth: 1200,
+      margin: '0 auto',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
+    }}>
       {/* Available Services Preview */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '40px', position: 'relative', zIndex: 1 }}>
@@ -1188,14 +1299,13 @@ function MainDashboard({ user }: { user: User }) {
           <h3 style={{ margin: '0', color: 'white' }}>Loading services...</h3>
         </div>
       ) : categories.length > 0 ? (
-        <div style={{ position: 'relative', zIndex: 1 }}>
+        <div>
           <h2 style={{
-            fontSize: '1.8rem',
-            fontWeight: 800,
+            fontSize: '1.5rem',
+            fontWeight: 700,
             marginBottom: 20,
-            color: 'white',
-            textAlign: 'center',
-            textShadow: '0 2px 4px rgba(0,0,0,0.3)'
+            color: '#2c3e50',
+            textAlign: 'center'
           }}>Available Services</h2>
           <div style={{
             display: 'grid',
@@ -1321,79 +1431,95 @@ function MainDashboard({ user }: { user: User }) {
       )}
 
     </div>
-  );
-}
-
-function BookingsSection({ user }: { user: User }) {
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const token = localStorage.getItem("access_token");
-    if (!token) return;
-
-    fetch("http://localhost:8000/api/bookings/user/", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        setBookings(data);
-        setLoading(false);
-      })
-      .catch(() => {
-        setBookings([]);
-        setLoading(false);
-      });
-  }, []);
-
-  if (loading) {
-    return (
-      <div style={{ textAlign: "center", padding: "40px" }}>
-        <div style={{ fontSize: "48px", marginBottom: "16px" }}>⏳</div>
-        <h3 style={{ margin: "0", color: "#333" }}>Loading bookings...</h3>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ background: 'white', borderRadius: 16, padding: 32, maxWidth: 800, margin: '0 auto', boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)' }}>
-      <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 24 }}>📋 My Bookings</h2>
-      {bookings.length === 0 ? (
-        <p style={{ color: '#666', textAlign: 'center', padding: '20px' }}>No bookings found. Start by browsing our services!</p>
-      ) : (
-        <div style={{ display: 'grid', gap: '16px' }}>
-          {bookings.map((booking: Booking) => (
-            <div key={booking.id} style={{ border: '1px solid #e9ecef', borderRadius: 8, padding: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <h4 style={{ margin: 0, color: '#333' }}>{booking.service_name}</h4>
-                <span style={{ 
-                  padding: '4px 8px', 
-                  borderRadius: '4px', 
-                  fontSize: '0.8rem',
-                  background: booking.status === 'completed' ? '#d4edda' : booking.status === 'in_progress' ? '#fff3cd' : '#f8d7da',
-                  color: booking.status === 'completed' ? '#155724' : booking.status === 'in_progress' ? '#856404' : '#721c24'
-                }}>
-                  {booking.status}
-                </span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: 12 }}>
-                <div>
-                  <strong>Provider:</strong> {booking.provider_name}
-                </div>
-                <div>
-                  <strong>Date:</strong> {booking.booking_date}
-                </div>
-                <div>
-                  <strong>Price:</strong> <span style={{ color: '#28a745', fontWeight: 600 }}>${booking.price}</span>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
+
+// Helper functions for parsing booking data
+const parseBookingNotes = (notes: string) => {
+  const result = {
+    isMultiService: false,
+    serviceCount: 1,
+    servicesList: [] as string[],
+    description: '',
+    address: '',
+    timeSlot: ''
+  };
+
+  if (!notes) return result;
+
+
+
+  // Check for multi-service booking
+  const servicesMatch = notes.match(/Services included: ([^\n\r]+)/);
+  const serviceCountMatch = notes.match(/Total services: (\d+)/);
+
+  if (servicesMatch && serviceCountMatch) {
+    const serviceCount = parseInt(serviceCountMatch[1]);
+    result.isMultiService = serviceCount > 1; // Only multi if more than 1 service
+    result.serviceCount = serviceCount;
+    result.servicesList = servicesMatch[1].split(', ').map(s => s.trim());
+  } else {
+    // Check for cart-based multi-service booking format
+    const cartMatch = notes.match(/Multi-service booking with (\d+) services/);
+    if (cartMatch) {
+      const serviceCount = parseInt(cartMatch[1]);
+      result.isMultiService = serviceCount > 1; // Only multi if more than 1 service
+      result.serviceCount = serviceCount;
+    }
+  }
+
+  // Extract description
+  const descriptionMatch = notes.match(/Description: ([^\n\r]+)/);
+  if (descriptionMatch) {
+    result.description = descriptionMatch[1].trim();
+  }
+
+  // Extract address - try multiple patterns
+  let addressMatch = notes.match(/Address: ([^\n\r]+)/);
+  if (!addressMatch) {
+    // Try alternative patterns
+    addressMatch = notes.match(/address: ([^\n\r]+)/i);
+  }
+  if (!addressMatch) {
+    // Try to find address in different format
+    addressMatch = notes.match(/Service Address: ([^\n\r]+)/);
+  }
+  if (!addressMatch) {
+    // Try to find address at the end of notes (common pattern)
+    addressMatch = notes.match(/Address:\s*([^,\n\r]+?)(?:\s+Description:|$)/);
+  }
+  if (addressMatch) {
+    result.address = addressMatch[1].trim();
+  }
+
+  // Extract time slot - try multiple patterns including time ranges
+  let timeMatch = notes.match(/Time Slot: ([^\n\r]+)/);
+  if (!timeMatch) {
+    timeMatch = notes.match(/time slot: ([^\n\r]+)/i);
+  }
+  if (!timeMatch) {
+    // Look for time ranges like "3pm-6pm", "3:00pm-6:00pm", "3 PM - 6 PM"
+    timeMatch = notes.match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*[-–]\s*\d{1,2}(?::\d{2})?\s*(?:am|pm))/i);
+  }
+  if (!timeMatch) {
+    // Look for single times like "at 11:32 PM"
+    timeMatch = notes.match(/at (\d{1,2}:\d{2}\s*(?:AM|PM))/i);
+  }
+  if (!timeMatch) {
+    // Look for any time format
+    timeMatch = notes.match(/(\d{1,2}:\d{2}\s*(?:AM|PM))/i);
+  }
+  if (!timeMatch) {
+    // Look for simple time formats like "3pm", "6am"
+    timeMatch = notes.match(/(\d{1,2}\s*(?:am|pm))/i);
+  }
+  if (timeMatch) {
+    result.timeSlot = timeMatch[1].trim();
+  }
+
+  return result;
+};
 
 function RequestsSection({ user, hasPermission }: { user: User; hasPermission: (permission: string) => boolean }) {
   const [requests, setRequests] = useState<any[]>([]);
@@ -1405,6 +1531,8 @@ function RequestsSection({ user, hasPermission }: { user: User; hasPermission: (
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState('');
   const [ratingLoading, setRatingLoading] = useState(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
 
   const fetchRequests = async () => {
     const token = localStorage.getItem("access_token");
@@ -1491,6 +1619,15 @@ function RequestsSection({ user, hasPermission }: { user: User; hasPermission: (
 
     if (!confirmCancel) return;
 
+    // Prompt for cancellation reason
+    const cancellationReason = window.prompt(
+      "Please provide a reason for cancellation (optional):",
+      "Change of plans"
+    );
+
+    // If user clicked Cancel on the prompt, don't proceed
+    if (cancellationReason === null) return;
+
     setCancelLoading(requestId);
 
     try {
@@ -1508,7 +1645,10 @@ function RequestsSection({ user, hasPermission }: { user: User; hasPermission: (
         headers: {
           "Authorization": `Bearer ${token}`,
           "Content-Type": "application/json"
-        }
+        },
+        body: JSON.stringify({
+          cancellation_reason: cancellationReason || "Customer requested cancellation"
+        })
       });
 
       console.log('API Response status:', response.status);
@@ -1881,183 +2021,259 @@ function RequestsSection({ user, hasPermission }: { user: User; hasPermission: (
 
         </div>
       ) : (
-        <div style={{ display: 'grid', gap: '15px', position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'grid', gap: '8px', position: 'relative', zIndex: 1 }}>
           {requests.map((request: any, index: number) => (
-            <div key={index} style={{ 
-              background: 'rgba(255,255,255,0.95)', 
-              borderRadius: 20, 
-              padding: 20, 
-              boxShadow: '0 15px 35px rgba(0,0,0,0.1)',
-              border: '2px solid transparent',
-              transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+            <div key={index} style={{
+              background: 'rgba(255,255,255,0.95)',
+              borderRadius: 10,
+              padding: 12,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
+              border: '1px solid rgba(0,0,0,0.05)',
+              transition: 'all 0.3s ease',
               position: 'relative',
               overflow: 'hidden',
               backdropFilter: 'blur(10px)'
             }}
             onMouseEnter={e => {
-              e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
-              e.currentTarget.style.boxShadow = '0 25px 50px rgba(0,0,0,0.2)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.1)';
             }}
             onMouseLeave={e => {
-              e.currentTarget.style.transform = 'translateY(0) scale(1)';
-              e.currentTarget.style.boxShadow = '0 15px 35px rgba(0,0,0,0.1)';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.06)';
             }}>
-              <div style={{ 
-                position: 'absolute', 
-                top: 0, 
-                left: 0, 
-                right: 0, 
-                height: 6, 
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 3,
                 background: getStatusColor(request.status),
-                borderRadius: '25px 25px 0 0'
+                borderRadius: '10px 10px 0 0'
               }}></div>
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 25 }}>
+
+              {/* Compact Header Row */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                 <div>
-                  <h4 style={{ 
-                    margin: '0 0 8px 0', 
-                    color: '#333', 
-                    fontSize: '1.3rem', 
-                    fontWeight: 800 
-                  }}>
-                    {request.subcategory?.name || 'Service Request'}
-                  </h4>
-                  <p style={{ 
-                    margin: '0 0 10px 0', 
-                    color: '#666', 
-                    fontSize: '0.9rem', 
-                    lineHeight: 1.4,
-                    fontWeight: 500
-                  }}>
-                    {request.notes || 'No additional details provided'}
-                  </p>
+                  {/* Compact Service Title */}
+                  <div style={{ flex: 1 }}>
+                    {(() => {
+                      const bookingData = parseBookingNotes(request.notes || '');
+
+                      if (bookingData.isMultiService) {
+                        return (
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                              <span style={{
+                                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                color: 'white',
+                                padding: '4px 10px',
+                                borderRadius: '12px',
+                                fontSize: '11px',
+                                fontWeight: 700
+                              }}>
+                                🛍️ Multi-Service ({bookingData.serviceCount})
+                              </span>
+                              {request.provider && (
+                                <span style={{
+                                  background: '#e8f5e8',
+                                  color: '#155724',
+                                  padding: '3px 8px',
+                                  borderRadius: '10px',
+                                  fontSize: '10px',
+                                  fontWeight: 600
+                                }}>
+                                  👨‍🔧 {request.provider}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '13px', color: '#495057', lineHeight: 1.3 }}>
+                              {bookingData.servicesList.join(' • ')}
+                            </div>
+                          </div>
+                        );
+                      } else {
+                        return (
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                              <h4 style={{
+                                margin: 0,
+                                fontSize: '14px',
+                                fontWeight: 700,
+                                color: '#333'
+                              }}>
+                                🔧 {request.subcategory?.name || 'Service Request'}
+                              </h4>
+                              {request.provider && (
+                                <span style={{
+                                  background: '#e8f5e8',
+                                  color: '#155724',
+                                  padding: '3px 8px',
+                                  borderRadius: '10px',
+                                  fontSize: '10px',
+                                  fontWeight: 600
+                                }}>
+                                  👨‍🔧 {request.provider}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      }
+                    })()}
+                  </div>
                 </div>
-                <div style={{ 
-                  background: getStatusColor(request.status), 
-                  color: 'white', 
-                  padding: '8px 15px', 
-                  borderRadius: 20, 
-                  fontWeight: 800,
-                  fontSize: '0.8rem',
+                <div style={{
+                  background: getStatusColor(request.status),
+                  color: 'white',
+                  padding: '4px 10px',
+                  borderRadius: 12,
+                  fontWeight: 700,
+                  fontSize: '10px',
                   textTransform: 'uppercase',
-                  boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
                   letterSpacing: '0.5px'
                 }}>
                   {request.status}
                 </div>
               </div>
               
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
-                gap: '20px', 
-                marginBottom: 25 
-              }}>
-                <div style={{ 
-                  background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', 
-                  padding: '15px', 
-                  borderRadius: 15,
-                  border: '1px solid rgba(0,0,0,0.05)'
-                }}>
-                  <strong style={{ color: '#333', fontSize: '0.9rem' }}>💰 Price:</strong>
-                  <p style={{ margin: '8px 0 0 0', color: '#666', fontSize: '1rem', fontWeight: 600 }}>${request.total_price}</p>
-                </div>
-                <div style={{ 
-                  background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', 
-                  padding: '15px', 
-                  borderRadius: 15,
-                  border: '1px solid rgba(0,0,0,0.05)'
-                }}>
-                  <strong style={{ color: '#333', fontSize: '0.9rem' }}>📅 Service Date:</strong>
-                  <p style={{ margin: '8px 0 0 0', color: '#666', fontSize: '1rem', fontWeight: 600 }}>{formatDate(request.service_date)}</p>
-                </div>
-                <div style={{ 
-                  background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)', 
-                  padding: '15px', 
-                  borderRadius: 15,
-                  border: '1px solid rgba(0,0,0,0.05)'
-                }}>
-                  <strong style={{ color: '#333', fontSize: '0.9rem' }}>💳 Payment:</strong>
-                  <p style={{ margin: '8px 0 0 0', color: '#666', fontSize: '1rem', fontWeight: 600 }}>{request.payment_status}</p>
-                </div>
-              </div>
-              
-              {request.provider && (
-                <div style={{ 
-                  background: 'linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%)', 
-                  padding: '15px', 
-                  borderRadius: 15,
-                  border: '2px solid #4CAF50',
-                  marginBottom: 15
-                }}>
-                  <strong style={{ color: '#2e7d32', fontSize: '0.9rem' }}>👨‍🔧 Assigned Provider:</strong>
-                  <p style={{ margin: '8px 0 0 0', color: '#388e3c', fontSize: '1rem', fontWeight: 600 }}>{request.provider}</p>
-                </div>
-              )}
-              
+              {/* Compact Info Row */}
               <div style={{
-                background: 'linear-gradient(135deg, #f0f8ff 0%, #e3f2fd 100%)',
-                padding: '15px',
-                borderRadius: 15,
-                borderLeft: '4px solid #667eea'
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '8px',
+                marginBottom: 8,
+                fontSize: '12px'
               }}>
-                <strong style={{ color: '#333', fontSize: '0.9rem' }}>📍 Service Address:</strong>
-                <p style={{ margin: '8px 0 0 0', color: '#666', lineHeight: 1.4, fontSize: '0.9rem' }}>
-                  {request.address || 'No address provided'}
-                </p>
-              </div>
+                <span style={{
+                  background: '#e8f5e8',
+                  color: '#155724',
+                  padding: '3px 8px',
+                  borderRadius: '8px',
+                  fontWeight: 600
+                }}>
+                  💰 ${request.total_price}
+                </span>
+                <span style={{
+                  background: '#e3f2fd',
+                  color: '#1565c0',
+                  padding: '3px 8px',
+                  borderRadius: '8px',
+                  fontWeight: 600
+                }}>
+                  📅 {new Date(request.service_date).toLocaleDateString()}
+                </span>
+                {(() => {
+                  // Extract time from service_date or notes
+                  let timeSlot = '';
 
-              <div style={{
-                background: 'linear-gradient(135deg, #f0f8ff 0%, #e3f2fd 100%)',
-                padding: '15px',
-                borderRadius: 15,
-                borderLeft: '4px solid #667eea',
-                marginTop: '10px'
-              }}>
-                <strong style={{ color: '#333', fontSize: '0.9rem' }}>📝 Request Details:</strong>
-                <p style={{ margin: '8px 0 0 0', color: '#666', lineHeight: 1.4, fontSize: '0.9rem' }}>
-                  {request.notes || 'No additional details provided'}
-                </p>
-              </div>
+                  // First try to get time from service_date if it includes time
+                  const serviceDate = new Date(request.service_date);
+                  const hours = serviceDate.getHours();
+                  const minutes = serviceDate.getMinutes();
 
-              {/* Cancel Button - only show for pending or accepted requests AND if user has permission */}
-              {(request.status?.toLowerCase() === 'pending' || request.status?.toLowerCase() === 'accepted') && hasPermission('cancel_bookings') && (
-                <div style={{ marginTop: 20, textAlign: 'center' }}>
+                  // If service_date has meaningful time (not just 00:00), use it
+                  if (hours !== 0 || minutes !== 0) {
+                    timeSlot = serviceDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                  } else {
+                    // Try to extract time from notes using enhanced parser
+                    const bookingData = parseBookingNotes(request.notes || '');
+                    timeSlot = bookingData.timeSlot;
+                  }
+
+                  return timeSlot ? (
+                    <span style={{
+                      background: '#f3e5f5',
+                      color: '#7b1fa2',
+                      padding: '3px 8px',
+                      borderRadius: '8px',
+                      fontWeight: 600
+                    }}>
+                      🕐 {timeSlot}
+                    </span>
+                  ) : null;
+                })()}
+                <span style={{
+                  background: '#fff3e0',
+                  color: '#ef6c00',
+                  padding: '3px 8px',
+                  borderRadius: '8px',
+                  fontWeight: 600
+                }}>
+                  💳 {request.payment_status || 'unpaid'}
+                </span>
+                {(() => {
+                  const bookingData = parseBookingNotes(request.notes || '');
+                  let address = bookingData.address || request.address || (request as any).service_address || (request as any).customer_address;
+
+                  // If no address found, try to extract from notes directly
+                  if (!address && request.notes) {
+                    const directMatch = request.notes.match(/([^,\n\r]+(?:street|st|avenue|ave|road|rd|drive|dr|lane|ln|boulevard|blvd|place|pl|court|ct|way|circle|cir)[^,\n\r]*)/i);
+                    if (directMatch) {
+                      address = directMatch[1].trim();
+                    }
+                  }
+
+                  return address && address !== 'No address provided' ? (
+                    <span style={{
+                      background: '#f3e5f5',
+                      color: '#7b1fa2',
+                      padding: '3px 8px',
+                      borderRadius: '8px',
+                      fontWeight: 600,
+                      maxWidth: '200px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      📍 {address}
+                    </span>
+                  ) : null;
+                })()}
+              </div>
+              {/* Compact Action Buttons */}
+              <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: 8 }}>
+                <button
+                  onClick={() => {
+                    setSelectedInvoice(request);
+                    setShowInvoiceModal(true);
+                  }}
+                  style={{
+                    background: '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: 6,
+                    padding: '4px 8px',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  📄 Invoice
+                </button>
+
+                {/* Cancel Button - only show for pending or accepted requests AND if user has permission */}
+                {(request.status?.toLowerCase() === 'pending' || request.status?.toLowerCase() === 'accepted') && hasPermission('cancel_bookings') && (
                   <button
                     onClick={() => handleCancelRequest(request.id.toString())}
                     disabled={cancelLoading === request.id.toString()}
                     style={{
-                      background: cancelLoading === request.id.toString()
-                        ? '#6c757d'
-                        : 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
+                      background: cancelLoading === request.id.toString() ? '#6c757d' : '#dc3545',
                       color: 'white',
                       border: 'none',
-                      borderRadius: 25,
-                      padding: '12px 30px',
-                      fontSize: '0.9rem',
+                      borderRadius: 6,
+                      padding: '4px 8px',
+                      fontSize: '10px',
                       fontWeight: 600,
-                      cursor: cancelLoading === request.id.toString() ? 'not-allowed' : 'pointer',
-                      transition: 'all 0.3s ease',
-                      boxShadow: '0 4px 15px rgba(220, 53, 69, 0.3)',
-                      opacity: cancelLoading === request.id.toString() ? 0.7 : 1
-                    }}
-                    onMouseEnter={e => {
-                      if (cancelLoading !== request.id.toString()) {
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(220, 53, 69, 0.4)';
-                      }
-                    }}
-                    onMouseLeave={e => {
-                      if (cancelLoading !== request.id.toString()) {
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = '0 4px 15px rgba(220, 53, 69, 0.3)';
-                      }
+                      cursor: cancelLoading === request.id.toString() ? 'not-allowed' : 'pointer'
                     }}
                   >
-                    {cancelLoading === request.id.toString() ? '⏳ Cancelling...' : '❌ Cancel Request'}
+                    {cancelLoading === request.id.toString() ? '⏳' : '❌'}
                   </button>
-                </div>
-              )}
+                )}
+              </div>
+
+
 
               {/* Permission denied message for cancel */}
               {(request.status?.toLowerCase() === 'pending' || request.status?.toLowerCase() === 'accepted') && !hasPermission('cancel_bookings') && (
@@ -2188,17 +2404,16 @@ function RequestsSection({ user, hasPermission }: { user: User; hasPermission: (
               )}
 
               <div style={{
-                marginTop: 15,
-                padding: '12px 15px',
-                background: 'rgba(0,0,0,0.05)',
-                borderRadius: 12,
-                border: '1px solid rgba(0,0,0,0.1)'
+                marginTop: 6,
+                paddingTop: 6,
+                borderTop: '1px solid rgba(0,0,0,0.05)',
+                fontSize: '9px',
+                color: '#999',
+                display: 'flex',
+                justifyContent: 'space-between'
               }}>
-                <small style={{ color: '#666', fontSize: '0.8rem' }}>
-                  <strong>Request ID:</strong> #{request.id} | 
-                  <strong>Created:</strong> {formatDate(request.created_at)} | 
-                  <strong>Last Updated:</strong> {formatDate(request.updated_at)}
-                </small>
+                <span>ID: #{request.id}</span>
+                <span>{new Date(request.created_at || request.booking_date).toLocaleDateString()}</span>
               </div>
             </div>
           ))}
@@ -2328,6 +2543,307 @@ function RequestsSection({ user, hasPermission }: { user: User; hasPermission: (
               >
                 {ratingLoading ? 'Submitting...' : 'Submit Rating'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Invoice Modal */}
+      {showInvoiceModal && selectedInvoice && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '20px',
+            padding: '0',
+            maxWidth: '600px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflowY: 'auto',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            position: 'relative'
+          }}>
+            {/* Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white',
+              padding: '30px',
+              borderRadius: '20px 20px 0 0',
+              position: 'relative'
+            }}>
+              <button
+                onClick={() => setShowInvoiceModal(false)}
+                style={{
+                  position: 'absolute',
+                  top: '20px',
+                  right: '20px',
+                  background: 'rgba(255,255,255,0.2)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '40px',
+                  height: '40px',
+                  color: 'white',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ×
+              </button>
+
+              <div style={{ textAlign: 'center' }}>
+                <h2 style={{ margin: '0 0 10px 0', fontSize: '28px', fontWeight: '700' }}>
+                  📄 Invoice
+                </h2>
+                <p style={{ margin: 0, opacity: 0.9, fontSize: '16px' }}>
+                  Booking ID: #{selectedInvoice.id}
+                </p>
+              </div>
+            </div>
+
+            {/* Invoice Content */}
+            <div style={{ padding: '30px' }}>
+              {/* Service Provider Info */}
+              <div style={{
+                background: '#f8f9fa',
+                borderRadius: '12px',
+                padding: '20px',
+                marginBottom: '24px',
+                border: '1px solid #e9ecef'
+              }}>
+                <h3 style={{ margin: '0 0 16px 0', color: '#2c3e50', fontSize: '18px' }}>
+                  👤 Service Provider
+                </h3>
+                <div style={{ fontSize: '16px', color: '#495057' }}>
+                  <strong>{selectedInvoice.provider || 'To be assigned'}</strong>
+                </div>
+              </div>
+
+              {/* Service Details */}
+              <div style={{
+                background: '#f8f9fa',
+                borderRadius: '12px',
+                padding: '20px',
+                marginBottom: '24px',
+                border: '1px solid #e9ecef'
+              }}>
+                <h3 style={{ margin: '0 0 16px 0', color: '#2c3e50', fontSize: '18px' }}>
+                  🛍️ Service Details
+                </h3>
+
+                {(() => {
+                  const servicesText = selectedInvoice.notes || '';
+                  const servicesMatch = servicesText.match(/Services included: ([^\\n]+)/);
+                  const serviceCount = servicesText.match(/Total services: (\\d+)/);
+
+                  if (servicesMatch && serviceCount && parseInt(serviceCount[1]) > 1) {
+                    // Multi-service booking
+                    const servicesList = servicesMatch[1].split(', ');
+                    return (
+                      <div>
+                        <div style={{
+                          background: '#667eea',
+                          color: 'white',
+                          padding: '8px 16px',
+                          borderRadius: '20px',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          display: 'inline-block',
+                          marginBottom: '16px'
+                        }}>
+                          {serviceCount[1]} Services
+                        </div>
+                        <div style={{ display: 'grid', gap: '12px' }}>
+                          {servicesList.map((service, index) => (
+                            <div key={index} style={{
+                              background: 'white',
+                              padding: '12px 16px',
+                              borderRadius: '8px',
+                              border: '1px solid #dee2e6',
+                              fontSize: '15px',
+                              color: '#495057'
+                            }}>
+                              • {service.trim()}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  } else {
+                    // Single service booking
+                    return (
+                      <div style={{
+                        background: 'white',
+                        padding: '16px',
+                        borderRadius: '8px',
+                        border: '1px solid #dee2e6',
+                        fontSize: '16px',
+                        color: '#495057'
+                      }}>
+                        {selectedInvoice.subcategory?.name || 'Service Request'}
+                      </div>
+                    );
+                  }
+                })()}
+              </div>
+
+              {/* Booking Information */}
+              <div style={{
+                background: '#f8f9fa',
+                borderRadius: '12px',
+                padding: '20px',
+                marginBottom: '24px',
+                border: '1px solid #e9ecef'
+              }}>
+                <h3 style={{ margin: '0 0 16px 0', color: '#2c3e50', fontSize: '18px' }}>
+                  📅 Booking Information
+                </h3>
+                <div style={{ display: 'grid', gap: '12px', fontSize: '15px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#6c757d' }}>Service Date:</span>
+                    <span style={{ fontWeight: '600', color: '#495057' }}>
+                      {formatDate(selectedInvoice.service_date)} at {(() => {
+                        // Smart time extraction for invoice
+                        const serviceDate = new Date(selectedInvoice.service_date);
+                        const hours = serviceDate.getHours();
+                        const minutes = serviceDate.getMinutes();
+
+                        // If service_date has meaningful time (not just 00:00), use it
+                        if (hours !== 0 || minutes !== 0) {
+                          return serviceDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+                        } else {
+                          // Try to extract time from notes using enhanced parser
+                          const bookingData = parseBookingNotes(selectedInvoice.notes || '');
+                          return bookingData.timeSlot || 'Not specified';
+                        }
+                      })()}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#6c757d' }}>Status:</span>
+                    <span style={{
+                      fontWeight: '600',
+                      color: selectedInvoice.status === 'completed' ? '#28a745' :
+                             selectedInvoice.status === 'accepted' ? '#007bff' :
+                             selectedInvoice.status === 'cancelled' ? '#dc3545' : '#ffc107',
+                      textTransform: 'capitalize'
+                    }}>
+                      {selectedInvoice.status}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#6c757d' }}>Booking Date:</span>
+                    <span style={{ fontWeight: '600', color: '#495057' }}>
+                      {formatDate(selectedInvoice.booking_date)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Summary */}
+              <div style={{
+                background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                borderRadius: '12px',
+                padding: '24px',
+                color: 'white',
+                marginBottom: '24px'
+              }}>
+                <h3 style={{ margin: '0 0 20px 0', fontSize: '20px', fontWeight: '700' }}>
+                  💰 Payment Summary
+                </h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '16px', opacity: 0.9, marginBottom: '4px' }}>
+                      Total Amount
+                    </div>
+                    <div style={{ fontSize: '32px', fontWeight: '700' }}>
+                      ${selectedInvoice.total_price}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '14px', opacity: 0.9, marginBottom: '4px' }}>
+                      Payment Status
+                    </div>
+                    <div style={{
+                      background: 'rgba(255,255,255,0.2)',
+                      padding: '8px 16px',
+                      borderRadius: '20px',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      textTransform: 'capitalize'
+                    }}>
+                      {selectedInvoice.payment_status || 'Pending'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional Notes */}
+              {selectedInvoice.notes && (
+                <div style={{
+                  background: '#fff3cd',
+                  border: '1px solid #ffeaa7',
+                  borderRadius: '12px',
+                  padding: '20px',
+                  marginBottom: '24px'
+                }}>
+                  <h3 style={{ margin: '0 0 12px 0', color: '#856404', fontSize: '16px' }}>
+                    📝 Additional Notes
+                  </h3>
+                  <p style={{ margin: 0, color: '#856404', fontSize: '14px', lineHeight: 1.5 }}>
+                    {selectedInvoice.notes}
+                  </p>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                <button
+                  onClick={() => window.print()}
+                  style={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '25px',
+                    padding: '12px 24px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  🖨️ Print Invoice
+                </button>
+                <button
+                  onClick={() => setShowInvoiceModal(false)}
+                  style={{
+                    background: '#6c757d',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '25px',
+                    padding: '12px 24px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease'
+                  }}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2475,7 +2991,7 @@ function ServicesSection({ user }: { user: User }) {
     return acc;
   }, {});
 
-  const categoryIcons = {
+  const categoryIcons: Record<string, { icon: string; color: string; gradient: string }> = {
     "Cleaning Services": { icon: "🧹", color: "#667eea", gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" },
     "Appliance Repair & Installation": { icon: "🔧", color: "#667eea", gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" },
     "Electricians": { icon: "⚡", color: "#667eea", gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" },
@@ -2500,11 +3016,7 @@ function ServicesSection({ user }: { user: User }) {
     "9:00 PM - 10:00 PM"
   ];
 
-  const iconData = categoryIcons[selectedCategory] || {
-    icon: getCategoryIcon(selectedCategory),
-    color: "#667eea",
-    gradient: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-  };
+
 
   // Function to save quote request to backend
   const saveQuoteRequest = async (requestData: any) => {
@@ -2959,7 +3471,7 @@ function ServicesSection({ user }: { user: User }) {
               marginRight: 20,
               boxShadow: '0 8px 25px rgba(0,0,0,0.2)'
             }}>
-              {getCategoryIcon(selectedCategory)}
+              {getCategoryIcon(selectedCategory || '')}
             </div>
             <h3 style={{ 
               margin: 0, 
@@ -2977,7 +3489,7 @@ function ServicesSection({ user }: { user: User }) {
             gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
             gap: 20 
           }}>
-            {getFilteredAndSortedSubcategories().map((sub, index) => (
+            {getFilteredAndSortedSubcategories().map((sub: { id: number; name: string; description: string; priceRange: string; icon: string }, index: number) => (
               <div key={index} style={{
                 background: 'rgba(255,255,255,0.95)',
                 borderRadius: 25,
@@ -3141,248 +3653,6 @@ function ServicesSection({ user }: { user: User }) {
       )}
 
       {/* Old quote modal removed - replaced with BookingModal */}
-      {false && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100vw',
-          height: '100vh',
-          background: 'rgba(0, 0, 0, 0.6)',
-          zIndex: 1000,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backdropFilter: 'blur(8px)',
-          animation: 'fadeIn 0.3s ease'
-        }}>
-          <div style={{
-            background: 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
-            borderRadius: 25,
-            padding: 35,
-            minWidth: 450,
-            maxWidth: 550,
-            boxShadow: '0 30px 60px rgba(0,0,0,0.3)',
-            position: 'relative',
-            animation: 'slideUp 0.3s ease',
-            border: '1px solid rgba(255,255,255,0.3)',
-            backdropFilter: 'blur(20px)'
-          }}>
-            <button 
-              onClick={() => setQuoteModal({ open: false, subcategory: null })} 
-              style={{ 
-                position: 'absolute', 
-                top: 25, 
-                right: 25, 
-                background: 'rgba(0,0,0,0.1)', 
-                border: 'none', 
-                fontSize: 28, 
-                color: '#666', 
-                cursor: 'pointer',
-                width: 45,
-                height: 45,
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s ease'
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.2)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0.1)'}
-            >
-              ×
-            </button>
-            
-            <div style={{ textAlign: 'center', marginBottom: 25 }}>
-              <div style={{ 
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
-                width: 70, 
-                height: 70, 
-                borderRadius: '50%', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                fontSize: '2.5rem',
-                margin: '0 auto 20px',
-                boxShadow: '0 15px 35px rgba(0,0,0,0.2)'
-              }}>
-                📝
-              </div>
-              <h3 style={{ 
-                margin: '0 0 8px 0', 
-                color: '#333', 
-                fontWeight: 900, 
-                fontSize: '1.6rem' 
-              }}>Request a Quote</h3>
-              <div style={{ 
-                color: '#666', 
-                fontWeight: 600, 
-                fontSize: '1.1rem' 
-              }}>{quoteModal.subcategory}</div>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-              <div>
-                <label style={{ 
-                  fontWeight: 700, 
-                  color: '#333', 
-                  marginBottom: 12, 
-                  display: 'block',
-                  fontSize: '1.1rem'
-                }}>📝 Describe your service requirement:</label>
-                <textarea
-                  value={description}
-                  onChange={e => setDescription(e.target.value)}
-                  rows={3}
-                  placeholder="Please provide detailed information about the service you need..."
-                  style={{ 
-                    width: '100%', 
-                    borderRadius: 20, 
-                    border: '2px solid #e0e0e0', 
-                    padding: 15, 
-                    fontSize: 16, 
-                    resize: 'vertical', 
-                    background: '#f8f9fa',
-                    transition: 'all 0.3s ease',
-                    boxSizing: 'border-box',
-                    fontFamily: 'inherit'
-                  }}
-                  onFocus={e => e.target.style.borderColor = '#667eea'}
-                  onBlur={e => e.target.style.borderColor = '#e0e0e0'}
-                />
-              </div>
-              
-              <div>
-                <label style={{ 
-                  fontWeight: 700, 
-                  color: '#333', 
-                  marginBottom: 12, 
-                  display: 'block',
-                  fontSize: '1.1rem'
-                }}>📍 Address:</label>
-                <input
-                  type="text"
-                  value={address}
-                  onChange={e => setAddress(e.target.value)}
-                  placeholder="Enter your complete address"
-                  style={{ 
-                    width: '100%', 
-                    borderRadius: 20, 
-                    border: '2px solid #e0e0e0', 
-                    padding: 15, 
-                    fontSize: 16, 
-                    background: '#f8f9fa',
-                    transition: 'all 0.3s ease',
-                    boxSizing: 'border-box',
-                    fontFamily: 'inherit'
-                  }}
-                  onFocus={e => e.target.style.borderColor = '#667eea'}
-                  onBlur={e => e.target.style.borderColor = '#e0e0e0'}
-                />
-              </div>
-              
-              <div>
-                <label style={{ 
-                  fontWeight: 700, 
-                  color: '#333', 
-                  marginBottom: 12, 
-                  display: 'block',
-                  fontSize: '1.1rem'
-                }}>📅 Preferred Date:</label>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={e => setDate(e.target.value)}
-                  style={{ 
-                    width: '100%', 
-                    borderRadius: 20, 
-                    border: '2px solid #e0e0e0', 
-                    padding: 15, 
-                    fontSize: 16, 
-                    background: '#f8f9fa',
-                    transition: 'all 0.3s ease',
-                    boxSizing: 'border-box',
-                    fontFamily: 'inherit'
-                  }}
-                  onFocus={e => e.target.style.borderColor = '#667eea'}
-                  onBlur={e => e.target.style.borderColor = '#e0e0e0'}
-                />
-              </div>
-              
-              <div>
-                <label style={{ 
-                  fontWeight: 700, 
-                  color: '#333', 
-                  marginBottom: 12, 
-                  display: 'block',
-                  fontSize: '1.1rem'
-                }}>⏰ Preferred Time Range:</label>
-                <select
-                  value={timeRange}
-                  onChange={e => setTimeRange(e.target.value)}
-                  style={{ 
-                    width: '100%', 
-                    borderRadius: 20, 
-                    border: '2px solid #e0e0e0', 
-                    padding: 15, 
-                    fontSize: 16, 
-                    background: '#f8f9fa',
-                    transition: 'all 0.3s ease',
-                    boxSizing: 'border-box',
-                    fontFamily: 'inherit'
-                  }}
-                  onFocus={e => e.target.style.borderColor = '#667eea'}
-                  onBlur={e => e.target.style.borderColor = '#e0e0e0'}
-                >
-                  <option value="">Select time range</option>
-                  {timeRanges.map((tr) => (
-                    <option key={tr} value={tr}>{tr}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <button
-                style={{ 
-                  padding: '16px 0', 
-                  borderRadius: 30, 
-                  background: submitting ? '#4CAF50' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
-                  color: 'white', 
-                  fontWeight: 800, 
-                  border: 'none', 
-                  cursor: submitting ? 'not-allowed' : 'pointer', 
-                  fontSize: 18, 
-                  marginTop: 10, 
-                  boxShadow: '0 12px 30px rgba(0,0,0,0.2)',
-                  transition: 'all 0.3s ease',
-                  opacity: (!description.trim() || !address.trim() || !date || !timeRange || submitting) ? 0.6 : 1
-                }}
-                disabled={!description.trim() || !address.trim() || !date || !timeRange || submitting}
-                onMouseEnter={e => {
-                  if (!e.currentTarget.disabled && !submitting) {
-                    e.currentTarget.style.transform = 'translateY(-3px)';
-                    e.currentTarget.style.boxShadow = '0 15px 35px rgba(0,0,0,0.3)';
-                  }
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.2)';
-                }}
-                onClick={() => {
-                  saveQuoteRequest({
-                    service_name: quoteModal.subcategory,
-                    description: description,
-                    address: address,
-                    preferred_date: date,
-                    time_range: timeRange
-                  });
-                }}
-              >
-                {submitting ? '🔄 Submitting...' : '🚀 Submit Request'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       
       <style jsx>{`
         @keyframes fadeIn {
@@ -3506,4 +3776,581 @@ function NotificationsSection({ user }: { user: User }) {
   );
 }
 
- 
+function CartSection({ user }: { user: User }) {
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [popularAddOns, setPopularAddOns] = useState<any[]>([]);
+  const [allProviderServices, setAllProviderServices] = useState<any[]>([]);
+  const [showAllServices, setShowAllServices] = useState(false);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+
+  // Load cart from localStorage on component mount
+  useEffect(() => {
+    const savedCart = localStorage.getItem('userCart');
+    if (savedCart) {
+      try {
+        const cart = JSON.parse(savedCart);
+        setCartItems(cart.items || []);
+
+        // Load popular add-ons if there are items in cart
+        if (cart.items && cart.items.length > 0) {
+          loadPopularAddOns(cart.provider_id, cart.items);
+        }
+      } catch (error) {
+        console.error('Error loading cart:', error);
+        localStorage.removeItem('userCart');
+      }
+    }
+    setLoading(false);
+  }, []);
+
+  const loadPopularAddOns = async (providerId: string, currentCartItems?: CartItem[]) => {
+    try {
+      const token = localStorage.getItem("access_token");
+      const response = await fetch(`http://localhost:8000/api/marketplace/provider/${providerId}/services/`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const services = await response.json();
+        console.log('Loaded provider services:', services);
+
+        // Use current cart items or state cart items
+        const itemsToCheck = currentCartItems || cartItems;
+        const cartServiceIds = itemsToCheck.map(item => item.subcategory_id);
+        console.log('Cart service IDs:', cartServiceIds);
+
+        const availableServices = services.filter((service: any) =>
+          !cartServiceIds.includes(service.subcategory_id)
+        );
+
+        console.log('Available services for add-ons:', availableServices);
+        setPopularAddOns(availableServices.slice(0, 4));
+        setAllProviderServices(availableServices);
+      } else {
+        console.error('Failed to load provider services:', response.status);
+      }
+    } catch (error) {
+      console.error('Error loading popular add-ons:', error);
+    }
+  };
+
+  const addToCart = (service: any) => {
+    const currentCart = JSON.parse(localStorage.getItem('userCart') || '{"items": [], "provider_id": null, "provider_name": null}');
+
+    // Check if adding service from different provider
+    if (currentCart.provider_id && currentCart.provider_id !== service.provider_id) {
+      const confirmClear = window.confirm(
+        `The service you want to add is provided by a different provider (${service.provider_name}). Do you want to clear the cart and add this service?`
+      );
+
+      if (!confirmClear) return;
+
+      // Clear cart and start fresh
+      currentCart.items = [];
+      currentCart.provider_id = service.provider_id;
+      currentCart.provider_name = service.provider_name;
+    }
+
+    // Set provider if cart is empty
+    if (!currentCart.provider_id) {
+      currentCart.provider_id = service.provider_id;
+      currentCart.provider_name = service.provider_name;
+    }
+
+    // Add new item
+    const newItem: CartItem = {
+      id: `${service.subcategory_id}_${Date.now()}`,
+      subcategory_id: service.subcategory_id,
+      subcategory_name: service.subcategory_name,
+      provider_id: service.provider_id,
+      provider_name: service.provider_name,
+      price: service.provider_price,
+      description: service.description,
+      category_name: service.category_name || 'Service',
+      added_at: new Date().toISOString(),
+      // Popular add-ons don't have booking details - they'll use the same details as the main booking
+      booking_details: undefined
+    };
+
+    currentCart.items.push(newItem);
+    currentCart.total_price = currentCart.items.reduce((sum: number, item: CartItem) => sum + item.price, 0);
+    currentCart.total_items = currentCart.items.length;
+
+    localStorage.setItem('userCart', JSON.stringify(currentCart));
+    setCartItems(currentCart.items);
+
+    // Dispatch cart update event
+    window.dispatchEvent(new Event('cartUpdated'));
+
+    // Refresh popular add-ons
+    loadPopularAddOns(currentCart.provider_id, currentCart.items);
+
+    alert(`✅ ${service.subcategory_name} added to cart!`);
+  };
+
+  const removeFromCart = (itemId: string) => {
+    const currentCart = JSON.parse(localStorage.getItem('userCart') || '{"items": []}');
+    currentCart.items = currentCart.items.filter((item: CartItem) => item.id !== itemId);
+
+    if (currentCart.items.length === 0) {
+      currentCart.provider_id = null;
+      currentCart.provider_name = null;
+      currentCart.total_price = 0;
+      currentCart.total_items = 0;
+    } else {
+      currentCart.total_price = currentCart.items.reduce((sum: number, item: CartItem) => sum + item.price, 0);
+      currentCart.total_items = currentCart.items.length;
+    }
+
+    localStorage.setItem('userCart', JSON.stringify(currentCart));
+    setCartItems(currentCart.items);
+
+    // Dispatch cart update event
+    window.dispatchEvent(new Event('cartUpdated'));
+
+    // Refresh popular add-ons
+    if (currentCart.provider_id) {
+      loadPopularAddOns(currentCart.provider_id, currentCart.items);
+    }
+  };
+
+  const confirmBooking = async () => {
+    if (cartItems.length === 0) {
+      alert('Your cart is empty!');
+      return;
+    }
+
+    setConfirmLoading(true);
+    const token = localStorage.getItem("access_token");
+
+    try {
+      // Create booking with multiple services
+      const response = await fetch('http://localhost:8000/api/bookings/create-cart/', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          cart_items: cartItems,
+          notes: (() => {
+            // Extract booking details from cart items
+            const itemWithDetails = cartItems.find(item => item.booking_details);
+            const address = itemWithDetails?.booking_details?.address || '';
+            const timeSlot = itemWithDetails?.booking_details?.selected_time || '';
+            const servicesList = cartItems.map(item => item.subcategory_name).join(', ');
+
+            // Create comprehensive notes with address and time
+            let notes = `Multi-service booking with ${cartItems.length} services`;
+            notes += ` Services included: ${servicesList}`;
+            notes += ` Total services: ${cartItems.length}`;
+            if (address) {
+              notes += ` Address: ${address}`;
+            }
+            if (timeSlot) {
+              notes += ` Time Slot: ${timeSlot}`;
+            }
+            if (itemWithDetails?.booking_details?.notes) {
+              notes += ` Description: ${itemWithDetails.booking_details.notes}`;
+            }
+            return notes;
+          })(),
+          // Extract address from the first cart item with booking details
+          address: (() => {
+            const itemWithAddress = cartItems.find(item => item.booking_details?.address);
+            return itemWithAddress?.booking_details?.address || '';
+          })(),
+          // Extract service date and time from the first cart item with booking details
+          service_date: (() => {
+            const itemWithDate = cartItems.find(item => item.booking_details?.selected_date);
+            return itemWithDate?.booking_details?.selected_date || '';
+          })(),
+          service_time: (() => {
+            const itemWithTime = cartItems.find(item => item.booking_details?.selected_time);
+            return itemWithTime?.booking_details?.selected_time || '';
+          })()
+        })
+      });
+
+      if (response.ok) {
+        const booking = await response.json();
+
+        // Clear cart
+        localStorage.removeItem('userCart');
+        setCartItems([]);
+
+        alert(`✅ Booking confirmed! Your booking ID is ${booking.id}. You can track it in "My Requests".`);
+
+        // Redirect to requests page
+        window.location.href = '/end_user_dashboard/requests';
+      } else {
+        const errorData = await response.json();
+        alert(`❌ Failed to create booking: ${errorData.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error confirming booking:', error);
+      alert('❌ Network error. Please try again.');
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+
+  const totalPrice = cartItems.reduce((sum, item) => sum + item.price, 0);
+
+  if (loading) {
+    return (
+      <div style={{ textAlign: 'center', padding: '40px' }}>
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏳</div>
+        <h3>Loading cart...</h3>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      background: 'white',
+      borderRadius: 16,
+      padding: 32,
+      maxWidth: 1200,
+      margin: '0 auto',
+      boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)'
+    }}>
+      <h2 style={{
+        fontSize: '1.8rem',
+        fontWeight: 700,
+        marginBottom: 24,
+        color: '#2c3e50',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12
+      }}>
+        🛒 My Cart
+        {cartItems.length > 0 && (
+          <span style={{
+            background: '#667eea',
+            color: 'white',
+            padding: '4px 12px',
+            borderRadius: 20,
+            fontSize: '14px',
+            fontWeight: 600
+          }}>
+            {cartItems.length} item{cartItems.length !== 1 ? 's' : ''}
+          </span>
+        )}
+      </h2>
+
+      {cartItems.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+          <div style={{ fontSize: '64px', marginBottom: '16px' }}>🛒</div>
+          <h3 style={{ color: '#6c757d', marginBottom: '8px' }}>Your cart is empty</h3>
+          <p style={{ color: '#8e8e8e', marginBottom: '24px' }}>
+            Start by booking a service, then add more services from the same provider
+          </p>
+          <button
+            style={{
+              padding: '12px 24px',
+              borderRadius: 8,
+              background: '#667eea',
+              color: 'white',
+              border: 'none',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+            onClick={() => window.location.href = '/end_user_dashboard/services'}
+          >
+            Browse Services
+          </button>
+        </div>
+      ) : (
+        <div>
+          {/* Booking Details Summary */}
+          {(() => {
+            const itemWithBookingDetails = cartItems.find(item => item.booking_details);
+            return itemWithBookingDetails?.booking_details ? (
+              <div style={{
+                background: 'linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%)',
+                borderRadius: 12,
+                padding: 20,
+                marginBottom: 24,
+                border: '2px solid #4CAF50'
+              }}>
+                <h3 style={{ margin: '0 0 12px 0', color: '#2e7d32', fontSize: '1.1rem', fontWeight: 700 }}>
+                  📅 Booking Details
+                </h3>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '14px' }}>
+                  <span style={{ color: '#2e7d32', fontWeight: 600 }}>
+                    📅 Date: {new Date(itemWithBookingDetails.booking_details.selected_date).toLocaleDateString()}
+                  </span>
+                  <span style={{ color: '#2e7d32', fontWeight: 600 }}>
+                    🕐 Time: {itemWithBookingDetails.booking_details.selected_time}
+                  </span>
+                  <span style={{ color: '#2e7d32', fontWeight: 600 }}>
+                    📍 Address: {itemWithBookingDetails.booking_details.address}
+                  </span>
+                </div>
+                {itemWithBookingDetails.booking_details.notes && (
+                  <div style={{ marginTop: 8, fontSize: '13px', color: '#388e3c', fontStyle: 'italic' }}>
+                    💬 Notes: {itemWithBookingDetails.booking_details.notes}
+                  </div>
+                )}
+                <div style={{ marginTop: 8, fontSize: '12px', color: '#666' }}>
+                  ℹ️ All services in this cart will be scheduled for the same date, time, and address.
+                </div>
+              </div>
+            ) : null;
+          })()}
+
+          {/* Cart Items */}
+          <div style={{ marginBottom: 32 }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: 16, color: '#495057' }}>
+              Services from {cartItems[0]?.provider_name}
+            </h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {cartItems.map((item) => (
+                <div key={item.id} style={{
+                  background: '#f8f9fa',
+                  borderRadius: 12,
+                  padding: 20,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  border: '1px solid #e9ecef'
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <h4 style={{ margin: '0 0 8px 0', color: '#2c3e50', fontSize: '1.1rem' }}>
+                      {item.subcategory_name}
+                    </h4>
+                    <p style={{ margin: '0 0 8px 0', color: '#6c757d', fontSize: '14px' }}>
+                      {item.description}
+                    </p>
+
+                    {/* Show if this is the main service with booking details */}
+                    {item.booking_details && (
+                      <div style={{
+                        background: '#e8f5e8',
+                        color: '#2e7d32',
+                        padding: '4px 8px',
+                        borderRadius: 6,
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        display: 'inline-block',
+                        marginBottom: 8
+                      }}>
+                        📅 Main Service (with booking details)
+                      </div>
+                    )}
+
+                    <span style={{
+                      background: '#e3f2fd',
+                      color: '#1976d2',
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      fontSize: '12px',
+                      fontWeight: 500
+                    }}>
+                      {item.category_name}
+                    </span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#28a745' }}>
+                        ${item.price.toFixed(2)}
+                      </div>
+                    </div>
+
+                    <button
+                      style={{
+                        background: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 6,
+                        padding: '8px 12px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                      onClick={() => removeFromCart(item.id)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+
+
+          {/* Popular Add-ons Section */}
+          {popularAddOns.length > 0 && (
+            <div style={{ marginBottom: 32 }}>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: 16, color: '#495057' }}>
+                🌟 Popular Add-ons from {cartItems[0]?.provider_name}
+              </h3>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+                {popularAddOns.map((service) => (
+                  <div key={service.subcategory_id} style={{
+                    background: '#fff',
+                    borderRadius: 12,
+                    padding: 16,
+                    border: '2px solid #e9ecef',
+                    transition: 'all 0.3s ease'
+                  }}>
+                    <h4 style={{ margin: '0 0 8px 0', color: '#2c3e50', fontSize: '1rem' }}>
+                      {service.subcategory_name}
+                    </h4>
+                    <p style={{ margin: '0 0 12px 0', color: '#6c757d', fontSize: '14px', lineHeight: 1.4 }}>
+                      {service.description}
+                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#28a745' }}>
+                        ${service.provider_price}
+                      </span>
+                      <button
+                        style={{
+                          background: '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: 6,
+                          padding: '8px 16px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 600
+                        }}
+                        onClick={() => addToCart(service)}
+                      >
+                        + Add
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {allProviderServices.length > popularAddOns.length && (
+                <div style={{ textAlign: 'center', marginTop: 16 }}>
+                  <button
+                    style={{
+                      background: 'transparent',
+                      color: '#667eea',
+                      border: '2px solid #667eea',
+                      borderRadius: 8,
+                      padding: '12px 24px',
+                      cursor: 'pointer',
+                      fontWeight: 600
+                    }}
+                    onClick={() => setShowAllServices(!showAllServices)}
+                  >
+                    {showAllServices ? 'Show Less' : `View More (${allProviderServices.length - popularAddOns.length} more services)`}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* All Services Section */}
+          {showAllServices && allProviderServices.length > popularAddOns.length && (
+            <div style={{ marginBottom: 32 }}>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: 16, color: '#495057' }}>
+                🔧 All Services from {cartItems[0]?.provider_name}
+              </h3>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+                {allProviderServices.slice(popularAddOns.length).map((service) => (
+                  <div key={service.subcategory_id} style={{
+                    background: '#f8f9fa',
+                    borderRadius: 12,
+                    padding: 16,
+                    border: '1px solid #e9ecef'
+                  }}>
+                    <h4 style={{ margin: '0 0 8px 0', color: '#2c3e50', fontSize: '1rem' }}>
+                      {service.subcategory_name}
+                    </h4>
+                    <p style={{ margin: '0 0 8px 0', color: '#6c757d', fontSize: '14px' }}>
+                      {service.description}
+                    </p>
+                    <span style={{
+                      background: '#e3f2fd',
+                      color: '#1976d2',
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      marginBottom: 12,
+                      display: 'inline-block'
+                    }}>
+                      {service.category_name}
+                    </span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#28a745' }}>
+                        ${service.provider_price}
+                      </span>
+                      <button
+                        style={{
+                          background: '#667eea',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: 6,
+                          padding: '8px 16px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 600
+                        }}
+                        onClick={() => addToCart(service)}
+                      >
+                        + Add to Cart
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Total and Confirm Button */}
+          <div style={{
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            borderRadius: 12,
+            padding: 24,
+            color: 'white',
+            marginBottom: 32
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: '0 0 8px 0', fontSize: '1.3rem' }}>Total Amount</h3>
+                <p style={{ margin: 0, opacity: 0.9 }}>{cartItems.length} service{cartItems.length !== 1 ? 's' : ''}</p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '2rem', fontWeight: 700, marginBottom: 8 }}>
+                  ${totalPrice.toFixed(2)}
+                </div>
+                <button
+                  style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    color: 'white',
+                    border: '2px solid rgba(255,255,255,0.3)',
+                    borderRadius: 8,
+                    padding: '12px 24px',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    fontSize: '16px',
+                    backdropFilter: 'blur(10px)'
+                  }}
+                  onClick={confirmBooking}
+                  disabled={confirmLoading}
+                >
+                  {confirmLoading ? 'Confirming...' : 'Confirm Booking'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
