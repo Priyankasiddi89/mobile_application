@@ -13,6 +13,10 @@ from django.conf import settings
 from authentication.models import User
 from authentication.serializers import UserSerializer
 from authentication.views import PostgreSQLJWTAuthentication
+import random
+import string
+from django.core.mail import send_mail
+from django.conf import settings
 
 
 @api_view(['POST'])
@@ -330,6 +334,120 @@ def get_all_users(request):
         
     except Exception as e:
         return Response(
-            {'error': str(e)}, 
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+def generate_random_password(length=8):
+    """Generate a random strong password with 8 characters"""
+    # Include uppercase, lowercase, digits, and special characters
+    characters = string.ascii_letters + string.digits + "!@#$%^&*"
+
+    # Ensure at least one character from each category
+    password = [
+        random.choice(string.ascii_uppercase),  # At least one uppercase
+        random.choice(string.ascii_lowercase),  # At least one lowercase
+        random.choice(string.digits),           # At least one digit
+        random.choice("!@#$%^&*")              # At least one special char
+    ]
+
+    # Fill the rest randomly
+    for _ in range(length - 4):
+        password.append(random.choice(characters))
+
+    # Shuffle the password list
+    random.shuffle(password)
+
+    return ''.join(password)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def forgot_password(request):
+    """
+    Reset password and send new password via email
+    POST /api/auth/forgot-password/
+    """
+    try:
+        email = request.data.get('email')
+
+        if not email:
+            return Response(
+                {'error': 'Email is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Find user by email
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response({
+                'error': f'The email address "{email}" is not registered with our platform. Please check your email spelling or register for a new account.',
+                'email_provided': email,
+                'suggestion': 'Please verify your email address or create a new account if you haven\'t registered yet.'
+            }, status=status.HTTP_404_NOT_FOUND)
+
+        # Generate new random password
+        new_password = generate_random_password(8)
+
+        # Update user password
+        user.set_password(new_password)
+        user.save()
+
+        # Send email with new password
+        try:
+            subject = 'Home Services Platform - Password Reset'
+            message = f"""
+Hello {user.first_name or user.username},
+
+Your password has been reset successfully. Here are your new login credentials:
+
+Username: {user.username}
+New Password: {new_password}
+
+For security reasons, we recommend changing this password after logging in.
+
+You can log in at: http://localhost:3000/login
+
+Best regards,
+Home Services Platform Team
+            """
+
+            # Try to send email (will work if email settings are configured)
+            send_mail(
+                subject,
+                message,
+                settings.DEFAULT_FROM_EMAIL if hasattr(settings, 'DEFAULT_FROM_EMAIL') else 'noreply@homeservices.com',
+                [email],
+                fail_silently=False,
+            )
+
+            print(f"✅ Password reset email sent to {email}")
+            print(f"🔑 New password for {user.username}: {new_password}")
+
+        except Exception as email_error:
+            print(f"❌ Email sending failed: {email_error}")
+            print(f"🔑 New password for {user.username}: {new_password}")
+
+            # Still return success but mention email issue
+            return Response(
+                {
+                    'message': 'Password has been reset. Email service is currently unavailable.',
+                    'new_password': new_password,  # For development only
+                    'username': user.username
+                },
+                status=status.HTTP_200_OK
+            )
+
+        return Response(
+            {'message': f'Password has been reset successfully for {user.username}. A new password has been sent to {email}.'},
+            status=status.HTTP_200_OK
+        )
+
+    except Exception as e:
+        print(f"❌ Forgot password error: {e}")
+        return Response(
+            {'error': 'An error occurred while processing your request'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )

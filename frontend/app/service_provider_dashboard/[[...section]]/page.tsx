@@ -9,6 +9,14 @@ interface User {
   user_type: string;
   role: string;
   is_active: boolean;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+  address?: string;
+  bio?: string;
+  experience_years?: number;
+  specializations?: string;
   registered_services: string[];
   statistics?: {
     total_bookings: number;
@@ -126,6 +134,14 @@ const parseBookingNotes = (notes: string) => {
       const serviceCount = parseInt(cartMatch[1]);
       result.isMultiService = serviceCount > 1; // Only multi if more than 1 service
       result.serviceCount = serviceCount;
+    } else {
+      // Check for single service booking format
+      const singleMatch = notes.match(/Single service booking: ([^\n\r]+)/);
+      if (singleMatch) {
+        result.isMultiService = false;
+        result.serviceCount = 1;
+        result.servicesList = [singleMatch[1].trim()];
+      }
     }
   }
 
@@ -135,7 +151,7 @@ const parseBookingNotes = (notes: string) => {
     result.description = descriptionMatch[1].trim();
   }
 
-  // Extract address - try multiple patterns
+  // Extract address - try multiple patterns and clean up
   let addressMatch = notes.match(/Address: ([^\n\r]+)/);
   if (!addressMatch) {
     // Try alternative patterns
@@ -150,7 +166,11 @@ const parseBookingNotes = (notes: string) => {
     addressMatch = notes.match(/Address:\s*([^,\n\r]+?)(?:\s+Description:|$)/);
   }
   if (addressMatch) {
-    result.address = addressMatch[1].trim();
+    let address = addressMatch[1].trim();
+    // Clean up address by removing time slot information that might be appended
+    address = address.replace(/\s+Time Slot:.*$/i, '');
+    address = address.replace(/\s+Description:.*$/i, '');
+    result.address = address.trim();
   }
 
   // Extract time slot - try multiple patterns including time ranges
@@ -161,6 +181,10 @@ const parseBookingNotes = (notes: string) => {
   if (!timeMatch) {
     // Look for time ranges like "3pm-6pm", "3:00pm-6:00pm", "3 PM - 6 PM"
     timeMatch = notes.match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*[-–]\s*\d{1,2}(?::\d{2})?\s*(?:am|pm))/i);
+  }
+  if (!timeMatch) {
+    // Look for simple number ranges like "9-12", "9 - 12"
+    timeMatch = notes.match(/(\d{1,2}\s*[-–]\s*\d{1,2})/);
   }
   if (!timeMatch) {
     // Look for single times like "at 11:32 PM"
@@ -572,7 +596,7 @@ export default function ProviderDashboardCatchAll() {
           </div>
         )}
         {/* Home page for service providers */}
-        {!section && <ServiceProviderHome user={user} />}
+        {!section && <ServiceProviderHome user={user} hasPermission={hasPermission} />}
 
         {/* Profile section */}
         {section === "profile" && !subsection && <ProfileSection user={user} hasPermission={hasPermission} />}
@@ -616,6 +640,7 @@ export default function ProviderDashboardCatchAll() {
           hasPermission('view_active_bookings') ? (
             <ActiveBookings
               user={user}
+              hasPermission={hasPermission}
               setSelectedInvoice={setSelectedInvoice}
               setShowInvoiceModal={setShowInvoiceModal}
             />
@@ -631,7 +656,7 @@ export default function ProviderDashboardCatchAll() {
         {/* Previous bookings section */}
         {section === "previous" && (
           hasPermission('view_previous_bookings') ? (
-            <PreviousBookings user={user} />
+            <PreviousBookings user={user} hasPermission={hasPermission} />
           ) : (
             <PermissionDeniedMessage
               feature="Previous Bookings"
@@ -644,7 +669,7 @@ export default function ProviderDashboardCatchAll() {
         {/* Ratings section */}
         {section === "ratings" && (
           hasPermission('view_own_ratings') ? (
-            <ProviderRatings user={user} />
+            <ProviderRatings user={user} hasPermission={hasPermission} />
           ) : (
             <PermissionDeniedMessage
               feature="Ratings & Reviews"
@@ -656,13 +681,30 @@ export default function ProviderDashboardCatchAll() {
 
         {/* Availability section */}
         {section === "availability" && (
-          hasPermission('manage_availability') ? (
-            <AvailabilityManagement user={user} />
+          (hasPermission('view_availability') || hasPermission('manage_availability')) ? (
+            <AvailabilityManagement
+              user={user}
+              canManage={hasPermission('manage_availability')}
+              canView={hasPermission('view_availability')}
+            />
           ) : (
             <PermissionDeniedMessage
-              feature="Availability Management"
-              permission="manage_availability"
-              description="You need permission to manage your availability slots and off days."
+              feature="Availability"
+              permission="view_availability"
+              description="You need permission to view your availability calendar and schedules."
+            />
+          )
+        )}
+
+        {/* Analytics section */}
+        {section === "analytics" && (
+          hasPermission('view_analytics') ? (
+            <AnalyticsSection user={user} />
+          ) : (
+            <PermissionDeniedMessage
+              feature="Analytics"
+              permission="view_analytics"
+              description="You need permission to view analytics and reports."
             />
           )
         )}
@@ -673,15 +715,28 @@ export default function ProviderDashboardCatchAll() {
             <EarningsSection user={user} />
           ) : (
             <PermissionDeniedMessage
-              feature="Earnings & Analytics"
+              feature="Earnings"
               permission="view_earnings"
-              description="You need permission to view your earnings and financial analytics."
+              description="You need permission to view earnings and payment history."
             />
           )
         )}
 
-        {/* Default service provider dashboard */}
-        {section && !["requests", "services", "active", "previous", "earnings"].includes(section) && <ServiceProviderDashboard user={user} />}
+        {/* Payments section */}
+        {section === "payments" && (
+          hasPermission('request_payments') ? (
+            <PaymentsSection user={user} />
+          ) : (
+            <PermissionDeniedMessage
+              feature="Payment Requests"
+              permission="request_payments"
+              description="You need permission to request payment withdrawals."
+            />
+          )
+        )}
+
+        {/* Default service provider dashboard for unknown sections */}
+        {section && !["requests", "services", "active", "previous", "analytics", "earnings", "payments", "ratings"].includes(section) && <ServiceProviderDashboard user={user} />}
       </main>
 
       {/* Invoice Modal */}
@@ -855,19 +910,28 @@ export default function ProviderDashboardCatchAll() {
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#6c757d' }}>Service Date:</span>
                     <span style={{ fontWeight: '600', color: '#495057' }}>
-                      {new Date(selectedInvoice.service_date).toLocaleDateString()} at {(() => {
-                        // Smart time extraction for invoice
+                      {new Date(selectedInvoice.service_date).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#6c757d' }}>Service Time:</span>
+                    <span style={{ fontWeight: '600', color: '#495057' }}>
+                      {(() => {
+                        // Smart time extraction for invoice - prioritize notes over service_date
+                        const bookingData = parseBookingNotes(selectedInvoice.notes || '');
+                        if (bookingData.timeSlot) {
+                          return bookingData.timeSlot;
+                        }
+
+                        // Fallback to service_date time only if it has meaningful time
                         const serviceDate = new Date(selectedInvoice.service_date);
                         const hours = serviceDate.getHours();
                         const minutes = serviceDate.getMinutes();
 
-                        // If service_date has meaningful time (not just 00:00), use it
                         if (hours !== 0 || minutes !== 0) {
                           return serviceDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
                         } else {
-                          // Try to extract time from notes using enhanced parser
-                          const bookingData = parseBookingNotes(selectedInvoice.notes || '');
-                          return bookingData.timeSlot || 'Not specified';
+                          return 'Not specified';
                         }
                       })()}
                     </span>
@@ -990,7 +1054,7 @@ function ServiceProviderDashboard({ user }: { user: User }) {
   );
 }
 
-function ServiceProviderHome({ user }: { user: User }) {
+function ServiceProviderHome({ user, hasPermission }: { user: User; hasPermission: (permission: string) => boolean }) {
   const router = useRouter();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -999,18 +1063,23 @@ function ServiceProviderHome({ user }: { user: User }) {
     const token = localStorage.getItem("access_token");
     if (!token) return;
 
-    fetch("http://localhost:8000/api/analytics/provider/dashboard/", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        setStats(data);
-        setLoading(false);
+    // Only fetch analytics if user has permission
+    if (hasPermission('view_analytics')) {
+      fetch("http://localhost:8000/api/analytics/provider/dashboard/", {
+        headers: { Authorization: `Bearer ${token}` },
       })
-      .catch(() => {
-        setLoading(false);
-      });
-  }, []);
+        .then((res) => res.json())
+        .then((data) => {
+          setStats(data);
+          setLoading(false);
+        })
+        .catch(() => {
+          setLoading(false);
+        });
+    } else {
+      setLoading(false);
+    }
+  }, [hasPermission]);
 
   if (loading) {
     return (
@@ -1060,13 +1129,14 @@ function ServiceProviderHome({ user }: { user: User }) {
         }}>Manage your services and track performance</p>
       </div>
 
-      {/* Stats Cards */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-        gap: 16,
-        marginBottom: 20
-      }}>
+      {/* Stats Cards - Only show if user has analytics permission */}
+      {hasPermission('view_analytics') && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gap: 16,
+          marginBottom: 20
+        }}>
 
 
         {/* Pending Requests */}
@@ -1165,38 +1235,41 @@ function ServiceProviderHome({ user }: { user: User }) {
           </div>
         </div>
 
-        {/* Your Rating */}
-        <div style={{
-          background: 'white',
-          padding: '18px',
-          borderRadius: '12px',
-          boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-          border: '1px solid #e9ecef',
-          cursor: 'pointer',
-          transition: 'all 0.2s ease'
-        }}
-        onClick={() => router.push('/service_provider_dashboard/ratings')}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'translateY(-2px)';
-          e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.15)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'translateY(0)';
-          e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontSize: '20px', color: '#f39c12', fontWeight: 700 }}>
-                {stats?.average_rating ? `${stats.average_rating}/5` : 'N/A'}
+        {/* Your Rating - Only show if user has view_own_ratings permission */}
+        {hasPermission('view_own_ratings') && (
+          <div style={{
+            background: 'white',
+            padding: '18px',
+            borderRadius: '12px',
+            boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+            border: '1px solid #e9ecef',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+          onClick={() => router.push('/service_provider_dashboard/ratings')}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,0,0,0.15)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 2px 10px rgba(0,0,0,0.1)';
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: '20px', color: '#f39c12', fontWeight: 700 }}>
+                  {stats?.average_rating ? `${stats.average_rating}/5` : 'N/A'}
+                </div>
+                <div style={{ fontSize: '14px', color: '#6c757d', fontWeight: 500 }}>
+                  Your Rating
+                </div>
               </div>
-              <div style={{ fontSize: '14px', color: '#6c757d', fontWeight: 500 }}>
-                Your Rating
-              </div>
+              <div style={{ fontSize: '24px' }}>⭐</div>
             </div>
-            <div style={{ fontSize: '24px' }}>⭐</div>
           </div>
+        )}
         </div>
-      </div>
+      )}
 
       {/* Quick Actions Section */}
       <div style={{
@@ -1295,59 +1368,62 @@ function ServiceProviderHome({ user }: { user: User }) {
               </div>
             </button>
 
-            <button
-              style={{
-                padding: '24px',
-                borderRadius: 16,
-                background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                border: 'none',
-                cursor: 'pointer',
-                textAlign: 'left',
-                color: 'white',
-                transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                boxShadow: '0 8px 25px rgba(240, 147, 251, 0.3)',
-                position: 'relative',
-                overflow: 'hidden'
-              }}
-              onClick={() => router.push('/service_provider_dashboard/earnings')}
-              onMouseEnter={e => {
-                e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
-                e.currentTarget.style.boxShadow = '0 20px 40px rgba(240, 147, 251, 0.4)';
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                e.currentTarget.style.boxShadow = '0 8px 25px rgba(240, 147, 251, 0.3)';
-              }}
-            >
-              <div style={{
-                position: 'absolute',
-                top: -20,
-                right: -20,
-                width: 80,
-                height: 80,
-                background: 'rgba(255,255,255,0.1)',
-                borderRadius: '50%',
-                filter: 'blur(20px)'
-              }}></div>
-
-              <div style={{ position: 'relative', zIndex: 1 }}>
+            {/* View Earnings - Only show if user has view_earnings permission */}
+            {hasPermission('view_earnings') && (
+              <button
+                style={{
+                  padding: '24px',
+                  borderRadius: 16,
+                  background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  color: 'white',
+                  transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                  boxShadow: '0 8px 25px rgba(240, 147, 251, 0.3)',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}
+                onClick={() => router.push('/service_provider_dashboard/earnings')}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
+                  e.currentTarget.style.boxShadow = '0 20px 40px rgba(240, 147, 251, 0.4)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(240, 147, 251, 0.3)';
+                }}
+              >
                 <div style={{
-                  background: 'rgba(255,255,255,0.2)',
-                  width: 50,
-                  height: 50,
-                  borderRadius: '12px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '24px',
-                  marginBottom: 16,
-                  backdropFilter: 'blur(10px)',
-                  border: '1px solid rgba(255,255,255,0.3)'
-                }}>💰</div>
-                <div style={{ fontWeight: 700, marginBottom: '8px', fontSize: '1.2rem' }}>View Earnings</div>
-                <div style={{ fontSize: '14px', opacity: 0.9, lineHeight: 1.4 }}>Detailed earnings analytics and performance metrics</div>
-              </div>
-            </button>
+                  position: 'absolute',
+                  top: -20,
+                  right: -20,
+                  width: 80,
+                  height: 80,
+                  background: 'rgba(255,255,255,0.1)',
+                  borderRadius: '50%',
+                  filter: 'blur(20px)'
+                }}></div>
+
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    width: 50,
+                    height: 50,
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '24px',
+                    marginBottom: 16,
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(255,255,255,0.3)'
+                  }}>💰</div>
+                  <div style={{ fontWeight: 700, marginBottom: '8px', fontSize: '1.2rem' }}>View Earnings</div>
+                  <div style={{ fontSize: '14px', opacity: 0.9, lineHeight: 1.4 }}>Detailed earnings analytics and performance metrics</div>
+                </div>
+              </button>
+            )}
 
             <button
               style={{
@@ -1402,6 +1478,177 @@ function ServiceProviderHome({ user }: { user: User }) {
                 <div style={{ fontSize: '14px', opacity: 0.9, lineHeight: 1.4 }}>Check and manage incoming booking requests</div>
               </div>
             </button>
+
+            {/* Analytics - Only show if user has view_analytics permission */}
+            {hasPermission('view_analytics') && (
+              <button
+                style={{
+                  padding: '24px',
+                  borderRadius: 16,
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  color: 'white',
+                  transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                  boxShadow: '0 8px 25px rgba(102, 126, 234, 0.3)',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}
+                onClick={() => router.push('/service_provider_dashboard/analytics')}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
+                  e.currentTarget.style.boxShadow = '0 20px 40px rgba(102, 126, 234, 0.4)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(102, 126, 234, 0.3)';
+                }}
+              >
+                <div style={{
+                  position: 'absolute',
+                  top: -20,
+                  right: -20,
+                  width: 80,
+                  height: 80,
+                  background: 'rgba(255,255,255,0.1)',
+                  borderRadius: '50%',
+                  filter: 'blur(20px)'
+                }}></div>
+
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    width: 50,
+                    height: 50,
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '24px',
+                    marginBottom: 16,
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(255,255,255,0.3)'
+                  }}>📊</div>
+                  <div style={{ fontWeight: 700, marginBottom: '8px', fontSize: '1.2rem' }}>View Analytics</div>
+                  <div style={{ fontSize: '14px', opacity: 0.9, lineHeight: 1.4 }}>Track performance and business insights</div>
+                </div>
+              </button>
+            )}
+
+            {/* Payment Requests - Only show if user has request_payments permission */}
+            {hasPermission('request_payments') && (
+              <button
+                style={{
+                  padding: '24px',
+                  borderRadius: 16,
+                  background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  color: 'white',
+                  transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                  boxShadow: '0 8px 25px rgba(40, 167, 69, 0.3)',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}
+                onClick={() => router.push('/service_provider_dashboard/payments')}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
+                  e.currentTarget.style.boxShadow = '0 20px 40px rgba(40, 167, 69, 0.4)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(40, 167, 69, 0.3)';
+                }}
+              >
+                <div style={{
+                  position: 'absolute',
+                  top: -20,
+                  right: -20,
+                  width: 80,
+                  height: 80,
+                  background: 'rgba(255,255,255,0.1)',
+                  borderRadius: '50%',
+                  filter: 'blur(20px)'
+                }}></div>
+
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    width: 50,
+                    height: 50,
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '24px',
+                    marginBottom: 16,
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(255,255,255,0.3)'
+                  }}>💳</div>
+                  <div style={{ fontWeight: 700, marginBottom: '8px', fontSize: '1.2rem' }}>Payment Requests</div>
+                  <div style={{ fontSize: '14px', opacity: 0.9, lineHeight: 1.4 }}>Request withdrawals and manage payments</div>
+                </div>
+              </button>
+            )}
+
+            {/* Ratings & Reviews - Only show if user has view_own_ratings permission */}
+            {hasPermission('view_own_ratings') && (
+              <button
+                style={{
+                  padding: '24px',
+                  borderRadius: 16,
+                  background: 'linear-gradient(135deg, #f39c12 0%, #e67e22 100%)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  color: 'white',
+                  transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+                  boxShadow: '0 8px 25px rgba(243, 156, 18, 0.3)',
+                  position: 'relative',
+                  overflow: 'hidden'
+                }}
+                onClick={() => router.push('/service_provider_dashboard/ratings')}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)';
+                  e.currentTarget.style.boxShadow = '0 20px 40px rgba(243, 156, 18, 0.4)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(243, 156, 18, 0.3)';
+                }}
+              >
+                <div style={{
+                  position: 'absolute',
+                  top: -20,
+                  right: -20,
+                  width: 80,
+                  height: 80,
+                  background: 'rgba(255,255,255,0.1)',
+                  borderRadius: '50%',
+                  filter: 'blur(20px)'
+                }}></div>
+
+                <div style={{ position: 'relative', zIndex: 1 }}>
+                  <div style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    width: 50,
+                    height: 50,
+                    borderRadius: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '24px',
+                    marginBottom: 16,
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(255,255,255,0.3)'
+                  }}>⭐</div>
+                  <div style={{ fontWeight: 700, marginBottom: '8px', fontSize: '1.2rem' }}>Ratings & Reviews</div>
+                  <div style={{ fontSize: '14px', opacity: 0.9, lineHeight: 1.4 }}>View customer feedback and ratings</div>
+                </div>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1624,18 +1871,21 @@ function IncomingRequests({ user, hasPermission, setSelectedInvoice, setShowInvo
                       <span><strong>Customer:</strong> {request.customer}</span>
                       <span><strong>Service Date:</strong> {new Date(request.service_date).toLocaleDateString()}</span>
                       <span><strong>Time Slot:</strong> {(() => {
-                        // Smart time extraction - try service_date first, then notes
+                        // Smart time extraction - prioritize notes over service_date
+                        const bookingData = parseBookingNotes(request.notes || '');
+                        if (bookingData.timeSlot) {
+                          return bookingData.timeSlot;
+                        }
+
+                        // Fallback to service_date time only if notes don't contain time
                         const serviceDate = new Date(request.service_date);
                         const hours = serviceDate.getHours();
                         const minutes = serviceDate.getMinutes();
 
-                        // If service_date has meaningful time (not just 00:00), use it
                         if (hours !== 0 || minutes !== 0) {
                           return serviceDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
                         } else {
-                          // Try to extract time from notes using enhanced parser
-                          const bookingData = parseBookingNotes(request.notes || '');
-                          return bookingData.timeSlot || 'Not specified';
+                          return 'Not specified';
                         }
                       })()}</span>
                       <span><strong>Price:</strong> ${request.total_price}</span>
@@ -1676,7 +1926,30 @@ function IncomingRequests({ user, hasPermission, setSelectedInvoice, setShowInvo
                 {request.notes && (
                   <div style={{ marginBottom: '16px', padding: '12px', background: 'white', borderRadius: 8, border: '1px solid #e9ecef' }}>
                     <strong style={{ color: '#495057' }}>📝 Notes:</strong>
-                    <p style={{ margin: '4px 0 0 0', color: '#6c757d' }}>{request.notes}</p>
+                    <p style={{ margin: '4px 0 0 0', color: '#6c757d' }}>
+                      {(() => {
+                        // Clean up messy notes by extracting only the description part
+                        const bookingData = parseBookingNotes(request.notes);
+                        if (bookingData.description) {
+                          return bookingData.description;
+                        }
+
+                        // If no description found, show a cleaned version of the notes
+                        let cleanNotes = request.notes;
+
+                        // Remove redundant service information that's already displayed above
+                        cleanNotes = cleanNotes.replace(/Multi-service booking with \d+ services\s*/g, '');
+                        cleanNotes = cleanNotes.replace(/Single service booking:\s*[^A-Z]*\s*/g, '');
+                        cleanNotes = cleanNotes.replace(/Services included:\s*[^A-Z]*\s*/g, '');
+                        cleanNotes = cleanNotes.replace(/Total services:\s*\d+\s*/g, '');
+                        cleanNotes = cleanNotes.replace(/Address:\s*[^A-Z]*\s*/g, '');
+                        cleanNotes = cleanNotes.replace(/Time Slot:\s*[^A-Z]*\s*/g, '');
+
+                        // Clean up extra spaces and return
+                        cleanNotes = cleanNotes.trim();
+                        return cleanNotes || 'Service booking - details available above';
+                      })()}
+                    </p>
                   </div>
                 )}
 
@@ -3053,8 +3326,9 @@ function ServicesSection({ user }: { user: User }) {
   );
 }
 
-function ActiveBookings({ user, setSelectedInvoice, setShowInvoiceModal }: {
+function ActiveBookings({ user, hasPermission, setSelectedInvoice, setShowInvoiceModal }: {
   user: User;
+  hasPermission?: (permissionCode: string) => boolean;
   setSelectedInvoice: (invoice: any) => void;
   setShowInvoiceModal: (show: boolean) => void;
 }) {
@@ -3317,18 +3591,21 @@ function ActiveBookings({ user, setSelectedInvoice, setShowInvoiceModal }: {
                       <span><strong>Customer:</strong> {booking.customer}</span>
                       <span><strong>Service Date:</strong> {new Date(booking.service_date).toLocaleDateString()}</span>
                       <span><strong>Time Slot:</strong> {(() => {
-                        // Smart time extraction - try service_date first, then notes
+                        // Smart time extraction - prioritize notes over service_date
+                        const bookingData = parseBookingNotes(booking.notes || '');
+                        if (bookingData.timeSlot) {
+                          return bookingData.timeSlot;
+                        }
+
+                        // Fallback to service_date time only if notes don't contain time
                         const serviceDate = new Date(booking.service_date);
                         const hours = serviceDate.getHours();
                         const minutes = serviceDate.getMinutes();
 
-                        // If service_date has meaningful time (not just 00:00), use it
                         if (hours !== 0 || minutes !== 0) {
                           return serviceDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
                         } else {
-                          // Try to extract time from notes using enhanced parser
-                          const bookingData = parseBookingNotes(booking.notes || '');
-                          return bookingData.timeSlot || 'Not specified';
+                          return 'Not specified';
                         }
                       })()}</span>
                       <span><strong>Price:</strong> ${booking.total_price}</span>
@@ -3393,11 +3670,64 @@ function ActiveBookings({ user, setSelectedInvoice, setShowInvoiceModal }: {
                     </button>
                   )}
                   {booking.status === 'confirmed' && (
+                    hasPermission && hasPermission('complete_bookings') ? (
+                      <button
+                        style={{
+                          padding: '10px 20px',
+                          borderRadius: 6,
+                          background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                          color: 'white',
+                          border: 'none',
+                          cursor: actionLoading === booking.id ? 'not-allowed' : 'pointer',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          opacity: actionLoading === booking.id ? 0.6 : 1,
+                          transition: 'all 0.3s ease'
+                        }}
+                        onClick={() => setShowPaymentModal(booking.id)}
+                        disabled={actionLoading === booking.id}
+                        onMouseEnter={e => {
+                          if (actionLoading !== booking.id) {
+                            e.currentTarget.style.transform = 'translateY(-2px)';
+                            e.currentTarget.style.boxShadow = '0 6px 15px rgba(40, 167, 69, 0.4)';
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          if (actionLoading !== booking.id) {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = 'none';
+                          }
+                        }}
+                      >
+                        {actionLoading === booking.id ? '⏳ Processing...' : '✅ Mark as Completed'}
+                      </button>
+                    ) : (
+                      <button
+                        style={{
+                          padding: '10px 20px',
+                          borderRadius: 6,
+                          background: '#6c757d',
+                          color: 'white',
+                          border: 'none',
+                          cursor: 'not-allowed',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          opacity: 0.6
+                        }}
+                        disabled
+                        title="You don't have permission to complete bookings"
+                      >
+                        🔒 Complete Booking
+                      </button>
+                    )
+                  )}
+                  {/* Cancel Booking - Check cancel_provider_bookings permission */}
+                  {hasPermission && hasPermission('cancel_provider_bookings') ? (
                     <button
                       style={{
                         padding: '10px 20px',
                         borderRadius: 6,
-                        background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                        background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
                         color: 'white',
                         border: 'none',
                         cursor: actionLoading === booking.id ? 'not-allowed' : 'pointer',
@@ -3406,12 +3736,12 @@ function ActiveBookings({ user, setSelectedInvoice, setShowInvoiceModal }: {
                         opacity: actionLoading === booking.id ? 0.6 : 1,
                         transition: 'all 0.3s ease'
                       }}
-                      onClick={() => setShowPaymentModal(booking.id)}
+                      onClick={() => handleCancelBooking(booking.id)}
                       disabled={actionLoading === booking.id}
                       onMouseEnter={e => {
                         if (actionLoading !== booking.id) {
                           e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = '0 6px 15px rgba(40, 167, 69, 0.4)';
+                          e.currentTarget.style.boxShadow = '0 6px 15px rgba(220, 53, 69, 0.4)';
                         }
                       }}
                       onMouseLeave={e => {
@@ -3421,39 +3751,27 @@ function ActiveBookings({ user, setSelectedInvoice, setShowInvoiceModal }: {
                         }
                       }}
                     >
-                      {actionLoading === booking.id ? '⏳ Processing...' : '✅ Mark as Completed'}
+                      {actionLoading === booking.id ? '⏳ Cancelling...' : '❌ Cancel Booking'}
+                    </button>
+                  ) : (
+                    <button
+                      style={{
+                        padding: '10px 20px',
+                        borderRadius: 6,
+                        background: '#6c757d',
+                        color: 'white',
+                        border: 'none',
+                        cursor: 'not-allowed',
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        opacity: 0.6
+                      }}
+                      disabled
+                      title="You don't have permission to cancel bookings"
+                    >
+                      🔒 Cancel Booking
                     </button>
                   )}
-                  <button
-                    style={{
-                      padding: '10px 20px',
-                      borderRadius: 6,
-                      background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
-                      color: 'white',
-                      border: 'none',
-                      cursor: actionLoading === booking.id ? 'not-allowed' : 'pointer',
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      opacity: actionLoading === booking.id ? 0.6 : 1,
-                      transition: 'all 0.3s ease'
-                    }}
-                    onClick={() => handleCancelBooking(booking.id)}
-                    disabled={actionLoading === booking.id}
-                    onMouseEnter={e => {
-                      if (actionLoading !== booking.id) {
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 6px 15px rgba(220, 53, 69, 0.4)';
-                      }
-                    }}
-                    onMouseLeave={e => {
-                      if (actionLoading !== booking.id) {
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.boxShadow = 'none';
-                      }
-                    }}
-                  >
-                    {actionLoading === booking.id ? '⏳ Cancelling...' : '❌ Cancel Booking'}
-                  </button>
                 </div>
               </div>
             ))}
@@ -3661,7 +3979,7 @@ function ActiveBookings({ user, setSelectedInvoice, setShowInvoiceModal }: {
   );
 }
 
-function PreviousBookings({ user }: { user: User }) {
+function PreviousBookings({ user, hasPermission }: { user: User; hasPermission?: (permissionCode: string) => boolean }) {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -3799,18 +4117,21 @@ function PreviousBookings({ user }: { user: User }) {
                       <span><strong>Customer:</strong> {booking.customer}</span>
                       <span><strong>Service Date:</strong> {new Date(booking.service_date).toLocaleDateString()}</span>
                       <span><strong>Time Slot:</strong> {(() => {
-                        // Smart time extraction - try service_date first, then notes
+                        // Smart time extraction - prioritize notes over service_date
+                        const bookingData = parseBookingNotes(booking.notes || '');
+                        if (bookingData.timeSlot) {
+                          return bookingData.timeSlot;
+                        }
+
+                        // Fallback to service_date time only if notes don't contain time
                         const serviceDate = new Date(booking.service_date);
                         const hours = serviceDate.getHours();
                         const minutes = serviceDate.getMinutes();
 
-                        // If service_date has meaningful time (not just 00:00), use it
                         if (hours !== 0 || minutes !== 0) {
                           return serviceDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
                         } else {
-                          // Try to extract time from notes using enhanced parser
-                          const bookingData = parseBookingNotes(booking.notes || '');
-                          return bookingData.timeSlot || 'Not specified';
+                          return 'Not specified';
                         }
                       })()}</span>
                       <span><strong>Price:</strong> ${booking.total_price}</span>
@@ -4137,7 +4458,699 @@ function EarningsSection({ user }: { user: User }) {
   );
 }
 
-function ProviderRatings({ user }: { user: User }) {
+function AnalyticsSection({ user }: { user: User }) {
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedPeriod, setSelectedPeriod] = useState('monthly');
+
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
+
+    // Fetch analytics data
+    fetch("http://localhost:8000/api/analytics/provider/dashboard/", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(res => res.json())
+      .then(data => {
+        console.log('Analytics data received:', data);
+        console.log('Analytics data keys:', Object.keys(data));
+        console.log('Completed bookings field:', data.completed_bookings);
+        console.log('All possible completion fields:', {
+          completed_bookings: data.completed_bookings,
+          completed: data.completed,
+          total_completed: data.total_completed,
+          completed_services: data.completed_services
+        });
+        setAnalytics(data);
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error('Error fetching analytics:', error);
+        setLoading(false);
+      });
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{ background: 'white', borderRadius: 16, padding: 32, maxWidth: 1200, margin: '0 auto', boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)' }}>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 16 }}>📊 Analytics & Reports</h2>
+        <p>Loading analytics...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        borderRadius: 20,
+        padding: 32,
+        marginBottom: 24,
+        color: 'white',
+        textAlign: 'center'
+      }}>
+        <h1 style={{ fontSize: '2rem', fontWeight: 800, margin: '0 0 8px 0' }}>📊 Analytics & Reports</h1>
+        <p style={{ fontSize: '1.1rem', opacity: 0.9, margin: 0 }}>
+          Track your performance and business insights
+        </p>
+      </div>
+
+      {/* Period Selector */}
+      <div style={{ marginBottom: 24, textAlign: 'center' }}>
+        <div style={{ display: 'inline-flex', background: 'white', borderRadius: 12, padding: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+          {['weekly', 'monthly', 'yearly'].map(period => (
+            <button
+              key={period}
+              onClick={() => setSelectedPeriod(period)}
+              style={{
+                padding: '8px 16px',
+                borderRadius: 8,
+                border: 'none',
+                background: selectedPeriod === period ? '#667eea' : 'transparent',
+                color: selectedPeriod === period ? 'white' : '#666',
+                fontWeight: 600,
+                cursor: 'pointer',
+                textTransform: 'capitalize'
+              }}
+            >
+              {period}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Analytics Cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 20, marginBottom: 24 }}>
+        {/* Total Bookings */}
+        <div style={{
+          background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+          borderRadius: 16,
+          padding: 24,
+          color: 'white',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 8 }}>📋</div>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem' }}>Total Bookings</h3>
+          <p style={{ fontSize: '2rem', fontWeight: 800, margin: 0 }}>
+            {analytics?.total_bookings || 0}
+          </p>
+        </div>
+
+        {/* Completed Services */}
+        <div style={{
+          background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+          borderRadius: 16,
+          padding: 24,
+          color: 'white',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 8 }}>✅</div>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem' }}>Completed</h3>
+          <p style={{ fontSize: '2rem', fontWeight: 800, margin: 0 }}>
+            {(() => {
+              // Try multiple possible field names for completed bookings
+              const completed = analytics?.completed_bookings ||
+                               analytics?.completed ||
+                               analytics?.total_completed ||
+                               analytics?.completed_services || 0;
+
+              // If we have total bookings and completion rate, calculate completed
+              if (completed === 0 && analytics?.total_bookings && analytics?.completion_rate) {
+                const calculated = Math.round((analytics.total_bookings * analytics.completion_rate) / 100);
+                console.log('Calculated completed bookings:', calculated, 'from total:', analytics.total_bookings, 'rate:', analytics.completion_rate);
+                return calculated;
+              }
+
+              return completed;
+            })()}
+          </p>
+        </div>
+
+        {/* Active Services */}
+        <div style={{
+          background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+          borderRadius: 16,
+          padding: 24,
+          color: 'white',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 8 }}>🔄</div>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem' }}>Active</h3>
+          <p style={{ fontSize: '2rem', fontWeight: 800, margin: 0 }}>
+            {(() => {
+              // Try multiple possible field names for active bookings
+              const active = analytics?.active_bookings ||
+                            analytics?.active ||
+                            analytics?.pending_bookings ||
+                            analytics?.in_progress || 0;
+
+              // If we have total and completed, calculate active (total - completed)
+              if (active === 0 && analytics?.total_bookings) {
+                const completed = analytics?.completed_bookings ||
+                                 analytics?.completed ||
+                                 analytics?.total_completed ||
+                                 analytics?.completed_services || 0;
+
+                // If completed is still 0 but we have completion rate, calculate it
+                const actualCompleted = completed === 0 && analytics?.completion_rate ?
+                  Math.round((analytics.total_bookings * analytics.completion_rate) / 100) : completed;
+
+                const calculated = Math.max(0, analytics.total_bookings - actualCompleted);
+                console.log('Calculated active bookings:', calculated, 'from total:', analytics.total_bookings, 'completed:', actualCompleted);
+                return calculated;
+              }
+
+              return active;
+            })()}
+          </p>
+        </div>
+
+        {/* Completion Rate */}
+        <div style={{
+          background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
+          borderRadius: 16,
+          padding: 24,
+          color: '#333',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 8 }}>📈</div>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem' }}>Completion Rate</h3>
+          <p style={{ fontSize: '2rem', fontWeight: 800, margin: 0 }}>
+            {analytics?.completion_rate ? `${analytics.completion_rate}%` : '0%'}
+          </p>
+        </div>
+      </div>
+
+      {/* Performance Metrics */}
+      <div style={{
+        background: 'white',
+        borderRadius: 16,
+        padding: 24,
+        marginBottom: 24,
+        boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)'
+      }}>
+        <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: 20, color: '#333' }}>
+          📊 Performance Metrics
+        </h3>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+          <div style={{ textAlign: 'center', padding: 16, background: '#f8f9fa', borderRadius: 12 }}>
+            <div style={{ fontSize: '1.5rem', marginBottom: 8 }}>⭐</div>
+            <p style={{ margin: '0 0 4px 0', fontSize: '0.9rem', color: '#666' }}>Average Rating</p>
+            <p style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0, color: '#333' }}>
+              {analytics?.average_rating ? analytics.average_rating.toFixed(1) : 'N/A'}
+            </p>
+          </div>
+
+          <div style={{ textAlign: 'center', padding: 16, background: '#f8f9fa', borderRadius: 12 }}>
+            <div style={{ fontSize: '1.5rem', marginBottom: 8 }}>💬</div>
+            <p style={{ margin: '0 0 4px 0', fontSize: '0.9rem', color: '#666' }}>Total Reviews</p>
+            <p style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0, color: '#333' }}>
+              {analytics?.total_reviews || 0}
+            </p>
+          </div>
+
+          <div style={{ textAlign: 'center', padding: 16, background: '#f8f9fa', borderRadius: 12 }}>
+            <div style={{ fontSize: '1.5rem', marginBottom: 8 }}>🛠️</div>
+            <p style={{ margin: '0 0 4px 0', fontSize: '0.9rem', color: '#666' }}>Services Offered</p>
+            <p style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0, color: '#333' }}>
+              {analytics?.registered_services_count || 0}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Activity */}
+      {analytics?.recent_activity && analytics.recent_activity.length > 0 && (
+        <div style={{
+          background: 'white',
+          borderRadius: 16,
+          padding: 24,
+          boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)'
+        }}>
+          <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: 20, color: '#333' }}>
+            🕒 Recent Activity
+          </h3>
+
+          <div style={{ display: 'grid', gap: 12 }}>
+            {analytics.recent_activity.slice(0, 5).map((activity: any, index: number) => (
+              <div key={index} style={{
+                padding: 16,
+                background: '#f8f9fa',
+                borderRadius: 12,
+                borderLeft: '4px solid #667eea'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <p style={{ margin: '0 0 4px 0', fontWeight: 600, color: '#333' }}>
+                      {activity.description || 'Service Activity'}
+                    </p>
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: '#666' }}>
+                      {activity.customer || 'Customer'} • {activity.service || 'Service'}
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <p style={{ margin: '0 0 4px 0', fontSize: '0.9rem', color: '#666' }}>
+                      {new Date(activity.date).toLocaleDateString()}
+                    </p>
+                    <span style={{
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      background: activity.status === 'completed' ? '#d4edda' : '#fff3cd',
+                      color: activity.status === 'completed' ? '#155724' : '#856404'
+                    }}>
+                      {activity.status || 'pending'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PaymentsSection({ user }: { user: User }) {
+  const [earnings, setEarnings] = useState<any>(null);
+  const [withdrawalHistory, setWithdrawalHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [withdrawalLoading, setWithdrawalLoading] = useState(false);
+  const [withdrawalAmount, setWithdrawalAmount] = useState('');
+  const [withdrawalMethod, setWithdrawalMethod] = useState('bank_transfer');
+  const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
+
+    // Fetch earnings and withdrawal history
+    Promise.all([
+      fetch("http://localhost:8000/api/analytics/provider/earnings/", {
+        headers: { Authorization: `Bearer ${token}` },
+      }),
+      fetch("http://localhost:8000/api/payments/withdrawals/", {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    ])
+      .then(([earningsRes, withdrawalsRes]) => Promise.all([earningsRes.json(), withdrawalsRes.json()]))
+      .then(([earningsData, withdrawalsData]) => {
+        console.log('Earnings data:', earningsData);
+        console.log('Withdrawals data:', withdrawalsData);
+        setEarnings(earningsData);
+        setWithdrawalHistory(withdrawalsData.withdrawals || []);
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error('Error fetching payment data:', error);
+        setLoading(false);
+      });
+  }, []);
+
+  const handleWithdrawalRequest = async () => {
+    if (!withdrawalAmount || parseFloat(withdrawalAmount) <= 0) {
+      alert('Please enter a valid withdrawal amount');
+      return;
+    }
+
+    const amount = parseFloat(withdrawalAmount);
+    const availableBalance = earnings?.available_balance || 0;
+
+    if (amount > availableBalance) {
+      alert(`Insufficient balance. Available: $${availableBalance}`);
+      return;
+    }
+
+    setWithdrawalLoading(true);
+    const token = localStorage.getItem("access_token");
+
+    try {
+      const response = await fetch('http://localhost:8000/api/payments/request-withdrawal/', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          amount: amount,
+          withdrawal_method: withdrawalMethod
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(`✅ Withdrawal request submitted successfully!\n\nAmount: $${amount}\nMethod: ${withdrawalMethod.replace('_', ' ')}\nReference: ${result.reference || 'N/A'}\n\nYour request will be processed within 2-3 business days.`);
+        setShowWithdrawalModal(false);
+        setWithdrawalAmount('');
+        // Refresh data
+        window.location.reload();
+      } else {
+        const error = await response.json();
+        alert(`❌ Error: ${error.message || 'Failed to submit withdrawal request'}`);
+      }
+    } catch (error) {
+      console.error('Withdrawal request error:', error);
+      alert('❌ Network error. Please try again.');
+    } finally {
+      setWithdrawalLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ background: 'white', borderRadius: 16, padding: 32, maxWidth: 1200, margin: '0 auto', boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)' }}>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 16 }}>💳 Payment Requests</h2>
+        <p>Loading payment information...</p>
+      </div>
+    );
+  }
+
+  const availableBalance = earnings?.available_balance || 0;
+  const pendingBalance = earnings?.pending_balance || 0;
+  const totalEarnings = earnings?.total_earnings || 0;
+
+  return (
+    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{
+        background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+        borderRadius: 20,
+        padding: 32,
+        marginBottom: 24,
+        color: 'white',
+        textAlign: 'center'
+      }}>
+        <h1 style={{ fontSize: '2rem', fontWeight: 800, margin: '0 0 8px 0' }}>💳 Payment Requests</h1>
+        <p style={{ fontSize: '1.1rem', opacity: 0.9, margin: 0 }}>
+          Request withdrawals and manage your payments
+        </p>
+      </div>
+
+      {/* Balance Overview */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 20, marginBottom: 24 }}>
+        {/* Available Balance */}
+        <div style={{
+          background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+          borderRadius: 16,
+          padding: 24,
+          color: 'white',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 8 }}>💰</div>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem' }}>Available Balance</h3>
+          <p style={{ fontSize: '2rem', fontWeight: 800, margin: 0 }}>
+            ${availableBalance.toFixed(2)}
+          </p>
+          <p style={{ fontSize: '0.9rem', opacity: 0.8, margin: '4px 0 0 0' }}>Ready for withdrawal</p>
+        </div>
+
+        {/* Pending Balance */}
+        <div style={{
+          background: 'linear-gradient(135deg, #ffc107 0%, #fd7e14 100%)',
+          borderRadius: 16,
+          padding: 24,
+          color: 'white',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 8 }}>⏳</div>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem' }}>Pending Balance</h3>
+          <p style={{ fontSize: '2rem', fontWeight: 800, margin: 0 }}>
+            ${pendingBalance.toFixed(2)}
+          </p>
+          <p style={{ fontSize: '0.9rem', opacity: 0.8, margin: '4px 0 0 0' }}>Processing payments</p>
+        </div>
+
+        {/* Total Earnings */}
+        <div style={{
+          background: 'linear-gradient(135deg, #6f42c1 0%, #e83e8c 100%)',
+          borderRadius: 16,
+          padding: 24,
+          color: 'white',
+          textAlign: 'center'
+        }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: 8 }}>📊</div>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '1.1rem' }}>Total Earnings</h3>
+          <p style={{ fontSize: '2rem', fontWeight: 800, margin: 0 }}>
+            ${totalEarnings.toFixed(2)}
+          </p>
+          <p style={{ fontSize: '0.9rem', opacity: 0.8, margin: '4px 0 0 0' }}>All time earnings</p>
+        </div>
+      </div>
+
+      {/* Request Withdrawal Button */}
+      <div style={{
+        background: 'white',
+        borderRadius: 16,
+        padding: 24,
+        marginBottom: 24,
+        boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)',
+        textAlign: 'center'
+      }}>
+        <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: 16, color: '#333' }}>
+          💸 Request Withdrawal
+        </h3>
+        <p style={{ color: '#666', marginBottom: 20 }}>
+          Request a withdrawal from your available balance of ${availableBalance.toFixed(2)}
+        </p>
+
+        <button
+          style={{
+            background: availableBalance > 0 ? 'linear-gradient(135deg, #007bff 0%, #0056b3 100%)' : '#6c757d',
+            color: 'white',
+            border: 'none',
+            borderRadius: 12,
+            padding: '16px 32px',
+            fontSize: '16px',
+            fontWeight: 600,
+            cursor: availableBalance > 0 ? 'pointer' : 'not-allowed',
+            transition: 'all 0.3s ease',
+            boxShadow: availableBalance > 0 ? '0 4px 15px rgba(0, 123, 255, 0.3)' : 'none'
+          }}
+          onClick={() => availableBalance > 0 && setShowWithdrawalModal(true)}
+          disabled={availableBalance <= 0}
+          onMouseEnter={e => {
+            if (availableBalance > 0) {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 123, 255, 0.4)';
+            }
+          }}
+          onMouseLeave={e => {
+            if (availableBalance > 0) {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 123, 255, 0.3)';
+            }
+          }}
+        >
+          {availableBalance > 0 ? '💸 Request Withdrawal' : '💸 No Balance Available'}
+        </button>
+      </div>
+
+      {/* Withdrawal History */}
+      <div style={{
+        background: 'white',
+        borderRadius: 16,
+        padding: 24,
+        boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)'
+      }}>
+        <h3 style={{ fontSize: '1.3rem', fontWeight: 700, marginBottom: 20, color: '#333' }}>
+          📋 Withdrawal History
+        </h3>
+
+        {withdrawalHistory.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: '#666' }}>
+            <div style={{ fontSize: '3rem', marginBottom: 16 }}>📝</div>
+            <p style={{ fontSize: '1.1rem', marginBottom: 8 }}>No withdrawal requests yet</p>
+            <p style={{ fontSize: '0.9rem' }}>Your withdrawal history will appear here</p>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 12 }}>
+            {withdrawalHistory.map((withdrawal: any, index: number) => (
+              <div key={index} style={{
+                padding: 16,
+                background: '#f8f9fa',
+                borderRadius: 12,
+                borderLeft: `4px solid ${
+                  withdrawal.status === 'completed' ? '#28a745' :
+                  withdrawal.status === 'pending' ? '#ffc107' :
+                  withdrawal.status === 'processing' ? '#17a2b8' : '#dc3545'
+                }`
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <p style={{ margin: '0 0 4px 0', fontWeight: 600, color: '#333' }}>
+                      ${withdrawal.amount} - {withdrawal.method?.replace('_', ' ') || 'Bank Transfer'}
+                    </p>
+                    <p style={{ margin: 0, fontSize: '0.9rem', color: '#666' }}>
+                      Reference: {withdrawal.reference || 'N/A'}
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <p style={{ margin: '0 0 4px 0', fontSize: '0.9rem', color: '#666' }}>
+                      {new Date(withdrawal.created_at).toLocaleDateString()}
+                    </p>
+                    <span style={{
+                      padding: '4px 12px',
+                      borderRadius: 12,
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      background:
+                        withdrawal.status === 'completed' ? '#d4edda' :
+                        withdrawal.status === 'pending' ? '#fff3cd' :
+                        withdrawal.status === 'processing' ? '#d1ecf1' : '#f8d7da',
+                      color:
+                        withdrawal.status === 'completed' ? '#155724' :
+                        withdrawal.status === 'pending' ? '#856404' :
+                        withdrawal.status === 'processing' ? '#0c5460' : '#721c24'
+                    }}>
+                      {withdrawal.status || 'pending'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Withdrawal Modal */}
+      {showWithdrawalModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: 16,
+            maxWidth: 500,
+            width: '90%',
+            maxHeight: '90vh',
+            overflow: 'auto'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #007bff 0%, #0056b3 100%)',
+              color: 'white',
+              padding: 24,
+              borderRadius: '16px 16px 0 0'
+            }}>
+              <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 700 }}>
+                💸 Request Withdrawal
+              </h3>
+              <p style={{ margin: '8px 0 0 0', opacity: 0.9, fontSize: '0.9rem' }}>
+                Available Balance: ${availableBalance.toFixed(2)}
+              </p>
+            </div>
+
+            {/* Modal Content */}
+            <div style={{ padding: 24 }}>
+              {/* Amount Input */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, color: '#333' }}>
+                  Withdrawal Amount ($)
+                </label>
+                <input
+                  type="number"
+                  value={withdrawalAmount}
+                  onChange={(e) => setWithdrawalAmount(e.target.value)}
+                  placeholder="Enter amount"
+                  min="1"
+                  max={availableBalance}
+                  step="0.01"
+                  style={{
+                    width: '100%',
+                    padding: 12,
+                    border: '2px solid #e9ecef',
+                    borderRadius: 8,
+                    fontSize: '16px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+                <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#666' }}>
+                  Maximum: ${availableBalance.toFixed(2)}
+                </p>
+              </div>
+
+              {/* Withdrawal Method */}
+              <div style={{ marginBottom: 24 }}>
+                <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, color: '#333' }}>
+                  Withdrawal Method
+                </label>
+                <select
+                  value={withdrawalMethod}
+                  onChange={(e) => setWithdrawalMethod(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: 12,
+                    border: '2px solid #e9ecef',
+                    borderRadius: 8,
+                    fontSize: '16px',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="paypal">PayPal</option>
+                  <option value="stripe">Stripe</option>
+                  <option value="check">Check</option>
+                </select>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                <button
+                  style={{
+                    padding: '12px 24px',
+                    border: '2px solid #6c757d',
+                    borderRadius: 8,
+                    background: 'white',
+                    color: '#6c757d',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => setShowWithdrawalModal(false)}
+                  disabled={withdrawalLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  style={{
+                    padding: '12px 24px',
+                    border: 'none',
+                    borderRadius: 8,
+                    background: withdrawalLoading ? '#6c757d' : 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                    color: 'white',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    cursor: withdrawalLoading ? 'not-allowed' : 'pointer'
+                  }}
+                  onClick={handleWithdrawalRequest}
+                  disabled={withdrawalLoading}
+                >
+                  {withdrawalLoading ? '⏳ Processing...' : '💸 Submit Request'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProviderRatings({ user, hasPermission }: { user: User; hasPermission?: (permission: string) => boolean }) {
   const [ratings, setRatings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -4145,6 +5158,9 @@ function ProviderRatings({ user }: { user: User }) {
     average_rating: 0,
     provider_name: ''
   });
+  const [responseLoading, setResponseLoading] = useState<string | null>(null);
+  const [showResponseModal, setShowResponseModal] = useState<string | null>(null);
+  const [responseText, setResponseText] = useState('');
 
   useEffect(() => {
     fetchRatings();
@@ -4196,6 +5212,110 @@ function ProviderRatings({ user }: { user: User }) {
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const handleResponseSubmit = async (ratingId: string) => {
+    if (!responseText.trim()) {
+      alert('Please enter a response');
+      return;
+    }
+
+    setResponseLoading(ratingId);
+    const token = localStorage.getItem("access_token");
+
+    console.log('Submitting response:', {
+      ratingId,
+      responseText: responseText.trim(),
+      token: token ? `Present (${token.substring(0, 20)}...)` : 'Missing',
+      url: `http://localhost:8000/api/bookings/ratings/${ratingId}/respond/`
+    });
+
+    try {
+      const response = await fetch(`http://localhost:8000/api/bookings/ratings/${ratingId}/respond/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          response: responseText.trim()
+        })
+      });
+
+      console.log('API response status:', response.status);
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Success response:', result);
+        alert('✅ Response submitted successfully!');
+        setShowResponseModal(null);
+        setResponseText('');
+        // Refresh ratings to show the new response
+        try {
+          await fetchRatings();
+        } catch (refreshError) {
+          console.error('Error refreshing ratings:', refreshError);
+          // Don't show error to user since the response was submitted successfully
+        }
+      } else {
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+
+        let errorMessage = 'Failed to submit response';
+        try {
+          const error = await response.json();
+          console.log('Error response:', error);
+
+          // Handle specific error cases first
+          if (response.status === 401) {
+            errorMessage = 'Authentication failed. Please log in again.';
+          } else if (response.status === 403) {
+            errorMessage = 'You do not have permission to respond to reviews.';
+          } else if (response.status === 404) {
+            errorMessage = 'Review not found or you do not have permission to respond to it.';
+          } else {
+            // Try to extract error message from various possible fields
+            if (typeof error === 'string') {
+              errorMessage = error;
+            } else if (error && typeof error === 'object') {
+              errorMessage = error.message || error.error || error.detail || error.non_field_errors?.[0] || 'Failed to submit response';
+
+              // If it's still an object, try to stringify it properly
+              if (typeof errorMessage === 'object') {
+                errorMessage = JSON.stringify(errorMessage);
+              }
+            }
+          }
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+          try {
+            const responseText = await response.text();
+            console.log('Raw response:', responseText);
+            errorMessage = `Server error (${response.status}): ${responseText.substring(0, 100)}`;
+          } catch (textError) {
+            errorMessage = `Server error (${response.status}): Unable to read response`;
+          }
+        }
+
+        alert(`❌ Error: ${errorMessage}`);
+      }
+    } catch (error) {
+      console.error('Response submission error:', error);
+
+      // Handle different types of errors
+      let errorMessage = 'Network error. Please try again.';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object') {
+        errorMessage = JSON.stringify(error);
+      }
+
+      alert(`❌ ${errorMessage}`);
+    } finally {
+      setResponseLoading(null);
+    }
   };
 
   if (loading) {
@@ -4313,16 +5433,231 @@ function ProviderRatings({ user }: { user: User }) {
               }}>
                 "{rating.review}"
               </div>
+
+              {/* Provider Response Section */}
+              {rating.provider_response ? (
+                <div style={{
+                  marginTop: '15px',
+                  background: '#e8f5e8',
+                  padding: '15px',
+                  borderRadius: '10px',
+                  borderLeft: '4px solid #28a745'
+                }}>
+                  <div style={{
+                    fontSize: '0.9rem',
+                    fontWeight: 600,
+                    color: '#28a745',
+                    marginBottom: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <span>💬</span> Your Response
+                  </div>
+                  <div style={{ color: '#555', lineHeight: 1.6 }}>
+                    "{rating.provider_response}"
+                  </div>
+                  {rating.response_date && (
+                    <div style={{
+                      fontSize: '0.8rem',
+                      color: '#666',
+                      marginTop: '8px',
+                      fontStyle: 'italic'
+                    }}>
+                      Responded on {formatDate(rating.response_date)}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                // Show respond button only if user has permission
+                hasPermission && hasPermission('respond_to_reviews') && (
+                  <div style={{ marginTop: '15px', textAlign: 'right' }}>
+                    <button
+                      style={{
+                        background: 'linear-gradient(135deg, #007bff 0%, #0056b3 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '10px 20px',
+                        fontSize: '14px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onClick={() => setShowResponseModal(rating.id)}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 123, 255, 0.3)';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                      💬 Respond to Review
+                    </button>
+                  </div>
+                )
+              )}
             </div>
           ))}
         </div>
         );
       })()}
+
+      {/* Response Modal */}
+      {showResponseModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: 16,
+            maxWidth: 600,
+            width: '90%',
+            maxHeight: '90vh',
+            overflow: 'auto'
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #007bff 0%, #0056b3 100%)',
+              color: 'white',
+              padding: 24,
+              borderRadius: '16px 16px 0 0'
+            }}>
+              <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 700 }}>
+                💬 Respond to Review
+              </h3>
+              <p style={{ margin: '8px 0 0 0', opacity: 0.9, fontSize: '0.9rem' }}>
+                Write a professional response to this customer review
+              </p>
+            </div>
+
+            {/* Modal Content */}
+            <div style={{ padding: 24 }}>
+              {(() => {
+                const review = ratings.find(r => r.id === showResponseModal);
+                if (!review) return null;
+
+                return (
+                  <>
+                    {/* Original Review */}
+                    <div style={{ marginBottom: 20 }}>
+                      <h4 style={{ margin: '0 0 12px 0', color: '#333', fontSize: '16px' }}>
+                        Original Review:
+                      </h4>
+                      <div style={{
+                        background: '#f8f9fa',
+                        padding: 16,
+                        borderRadius: 8,
+                        borderLeft: '4px solid #667eea'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          {renderStars(review.rating)}
+                          <span style={{ fontWeight: 600 }}>{review.rating}/5</span>
+                          <span style={{ color: '#666', fontSize: '0.9rem' }}>
+                            by {review.customer}
+                          </span>
+                        </div>
+                        <p style={{ margin: 0, fontStyle: 'italic', color: '#555' }}>
+                          "{review.review}"
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Response Input */}
+                    <div style={{ marginBottom: 24 }}>
+                      <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, color: '#333' }}>
+                        Your Response:
+                      </label>
+                      <textarea
+                        value={responseText}
+                        onChange={(e) => setResponseText(e.target.value)}
+                        placeholder="Write a professional and helpful response to this review..."
+                        rows={4}
+                        style={{
+                          width: '100%',
+                          padding: 12,
+                          border: '2px solid #e9ecef',
+                          borderRadius: 8,
+                          fontSize: '14px',
+                          fontFamily: 'inherit',
+                          resize: 'vertical',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                      <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#666' }}>
+                        Be professional, courteous, and address any concerns raised in the review.
+                      </p>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+                      <button
+                        style={{
+                          padding: '12px 24px',
+                          border: '2px solid #6c757d',
+                          borderRadius: 8,
+                          background: 'white',
+                          color: '#6c757d',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => {
+                          setShowResponseModal(null);
+                          setResponseText('');
+                        }}
+                        disabled={responseLoading === showResponseModal}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        style={{
+                          padding: '12px 24px',
+                          border: 'none',
+                          borderRadius: 8,
+                          background: responseLoading === showResponseModal ? '#6c757d' : 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+                          color: 'white',
+                          fontSize: '14px',
+                          fontWeight: 600,
+                          cursor: responseLoading === showResponseModal ? 'not-allowed' : 'pointer'
+                        }}
+                        onClick={() => handleResponseSubmit(showResponseModal)}
+                        disabled={responseLoading === showResponseModal}
+                      >
+                        {responseLoading === showResponseModal ? '⏳ Submitting...' : '💬 Submit Response'}
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function AvailabilityManagement({ user }: { user: User }) {
+function AvailabilityManagement({
+  user,
+  canManage = false,
+  canView = false
+}: {
+  user: User;
+  canManage?: boolean;
+  canView?: boolean;
+}) {
   const [availabilityData, setAvailabilityData] = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [offDays, setOffDays] = useState<any[]>([]);
@@ -4724,11 +6059,44 @@ function AvailabilityManagement({ user }: { user: User }) {
         marginBottom: '30px'
       }}>
         <h2 style={{ margin: '0 0 20px 0', fontSize: '2rem', fontWeight: 700 }}>
-          📅 Availability Management
+          📅 {canManage ? 'Availability Management' : 'Availability Calendar'}
         </h2>
         <p style={{ opacity: 0.9, fontSize: '1.1rem', margin: '0 0 20px 0' }}>
-          Manage your working hours and off days to control when customers can book your services
+          {canManage
+            ? 'Manage your working hours and off days to control when customers can book your services'
+            : 'View your availability calendar and scheduled time slots'
+          }
         </p>
+
+        {/* Permission Notice for View-Only Users */}
+        {!canManage && canView && (
+          <div style={{
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.15) 100%)',
+            padding: '16px 24px',
+            borderRadius: '12px',
+            marginTop: '15px',
+            border: '1px solid rgba(255,255,255,0.4)',
+            backdropFilter: 'blur(10px)',
+            boxShadow: '0 4px 15px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{
+              fontSize: '0.95rem',
+              opacity: 0.95,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontWeight: 500
+            }}>
+              <span style={{ fontSize: '1.1rem' }}>👁️</span>
+              <span>
+                You're viewing in <strong>read-only mode</strong>. Need to make changes?
+                <span style={{ opacity: 0.8, marginLeft: '4px' }}>
+                  Contact your administrator to unlock management features.
+                </span>
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Quick Stats */}
         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
@@ -4772,10 +6140,7 @@ function AvailabilityManagement({ user }: { user: User }) {
 
       {/* Quick Actions */}
       <div style={{ display: 'flex', gap: '20px', marginBottom: '30px', flexWrap: 'wrap' }}>
-
-
-
-
+        {/* View Off Days & Slots - Available for both view and manage permissions */}
         <button
           onClick={openOffDaysViewModal}
           style={{
@@ -4796,26 +6161,30 @@ function AvailabilityManagement({ user }: { user: User }) {
           👁️ View Off Days & Slots
         </button>
 
-        <button
-          onClick={openOffDayModal}
-          style={{
-            padding: '15px 25px',
-            borderRadius: '15px',
-            border: 'none',
-            background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-            color: 'white',
-            fontSize: '16px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            transition: 'all 0.3s ease',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-          }}
-        >
-          📅 Mark Off Days
-        </button>
+        {/* Management Actions - Only available with manage permission */}
+        {canManage && (
+          <button
+            onClick={openOffDayModal}
+            style={{
+              padding: '15px 25px',
+              borderRadius: '15px',
+              border: 'none',
+              background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+              color: 'white',
+              fontSize: '16px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}
+          >
+            📅 Mark Off Days
+          </button>
+        )}
 
+        {/* Refresh Button - Available for both view and manage permissions */}
         <button
           onClick={loadAvailabilityData}
           style={{
@@ -4899,34 +6268,37 @@ function AvailabilityManagement({ user }: { user: User }) {
                           {new Date(date).toLocaleDateString('en-US', { weekday: 'long' })}
                         </div>
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          openManageModal(date);
-                        }}
-                        style={{
-                          padding: '8px 16px',
-                          borderRadius: '8px',
-                          border: '1px solid #667eea',
-                          background: 'white',
-                          color: '#667eea',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                          fontWeight: 600,
-                          transition: 'all 0.2s ease'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = '#667eea';
-                          e.currentTarget.style.color = 'white';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'white';
-                          e.currentTarget.style.color = '#667eea';
-                        }}
-                      >
-                        ⚙️ Manage
-                      </button>
+                      {/* Manage button - Only show if user has manage permission */}
+                      {canManage && (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            openManageModal(date);
+                          }}
+                          style={{
+                            padding: '8px 16px',
+                            borderRadius: '8px',
+                            border: '1px solid #667eea',
+                            background: 'white',
+                            color: '#667eea',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = '#667eea';
+                            e.currentTarget.style.color = 'white';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'white';
+                            e.currentTarget.style.color = '#667eea';
+                          }}
+                        >
+                          ⚙️ Manage
+                        </button>
+                      )}
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>

@@ -7,8 +7,9 @@ from django.urls import path
 # Import views directly to avoid circular imports
 from .auth import (
     register_user, login_user, logout_user, get_current_user,
-    update_user_profile, get_all_users, get_user_profile
+    update_user_profile, get_all_users, get_user_profile, forgot_password
 )
+from .forgot_password_clean import forgot_password_clean
 from .services import (
     get_service_categories, get_service_subcategories, get_services_by_category,
     get_provider_registered_services, get_provider_available_services,
@@ -18,7 +19,7 @@ from .bookings import (
     create_booking, get_user_bookings, get_provider_bookings, get_provider_requests,
     update_booking_status, accept_booking_request, decline_booking_request, complete_booking,
     cancel_booking_request, delete_booking_request, create_provider_rating, get_provider_ratings,
-    manage_provider_availability, manage_provider_off_days, get_provider_available_slots,
+    respond_to_rating, manage_provider_availability, manage_provider_off_days, get_provider_available_slots,
     get_user_permissions, create_cart_booking
 )
 from .analytics import (
@@ -41,6 +42,8 @@ urlpatterns = [
     path('auth/register/', register_user, name='api_register'),
     path('auth/login/', login_user, name='api_login'),
     path('auth/logout/', logout_user, name='api_logout'),
+    path('auth/forgot-password/', forgot_password, name='api_forgot_password'),
+    path('auth/forgot-password-clean/', forgot_password_clean, name='api_forgot_password_clean'),
     path('auth/me/', get_current_user, name='api_current_user'),
     path('auth/profile/', get_user_profile, name='api_user_profile'),
     path('auth/me/update/', update_user_profile, name='api_update_profile'),
@@ -70,6 +73,7 @@ urlpatterns = [
     path('bookings/rate-provider/', create_provider_rating, name='api_create_rating'),
     path('user/permissions/', get_user_permissions, name='api_get_user_permissions'),
     path('bookings/provider/<int:provider_id>/ratings/', get_provider_ratings, name='api_provider_ratings'),
+    path('bookings/ratings/<int:rating_id>/respond/', respond_to_rating, name='api_respond_to_rating'),
     path('bookings/availability/', manage_provider_availability, name='api_provider_availability'),
     path('bookings/off-days/', manage_provider_off_days, name='api_provider_off_days'),
     path('bookings/provider/<int:provider_id>/available-slots/', get_provider_available_slots, name='api_provider_available_slots'),

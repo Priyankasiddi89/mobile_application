@@ -1,0 +1,384 @@
+HOME SERVICES PLATFORM - CURRENTLY USED APIs
+==============================================
+
+BASE URL: http://localhost:8000
+
+==============================================
+AUTHENTICATION APIs (Used by All User Types)
+==============================================
+
+POST   /api/auth/register/
+       Purpose: User registration for customers, service providers, and admins
+       Used by: Registration forms in all dashboards
+       Features: Account creation with user type selection
+
+POST   /api/auth/login/
+       Purpose: User authentication and login
+       Used by: Login page for all user types
+       Features: Username/password authentication, JWT token generation
+
+POST   /api/auth/forgot-password-clean/
+       Purpose: Password reset functionality
+       Used by: Forgot password modal in login page
+       Features: Generate new password and send via email
+
+GET    /api/auth/me/
+       Purpose: Get current user profile information
+       Used by: All dashboards for profile display and user verification
+       Features: Fetch user details, permissions, and account status
+
+PUT    /api/auth/me/update/
+       Purpose: Update user profile information
+       Used by: Profile management sections in all dashboards
+       Features: Update personal info, email, phone, address, password change
+
+==============================================
+END-USER SPECIFIC APIs
+==============================================
+
+GET    /api/services/categories/
+       Purpose: Fetch all service categories
+       Used by: Service browsing, category selection
+       Features: Display available service categories for booking
+
+GET    /api/services/subcategories/
+       Purpose: Fetch subcategories for selected category
+       Used by: Service browsing, subcategory filtering
+       Features: Hierarchical service organization
+
+GET    /api/marketplace/service/<int:service_id>/providers/
+       Purpose: Get list of providers for specific service
+       Used by: Provider selection during booking process
+       Features: Provider listings with ratings, prices, availability
+
+POST   /api/bookings/create-cart/
+       Purpose: Create booking with cart functionality
+       Used by: Booking process, cart management
+       Features: Add services to cart, manage add-ons, checkout process
+
+GET    /api/bookings/user/
+       Purpose: Get user's booking history and current bookings
+       Used by: Customer dashboard, booking status tracking
+       Features: View all bookings, track status, manage bookings
+
+GET    /api/bookings/provider/<int:provider_id>/available-slots/
+       Purpose: Get available time slots for specific provider
+       Used by: Date and time selection during booking
+       Features: Real-time availability checking, slot booking
+
+DELETE /api/bookings/<int:booking_id>/cancel/
+       Purpose: Cancel existing booking
+       Used by: Booking management, cancellation feature
+       Features: Cancel bookings, update status
+
+POST   /api/bookings/rate-provider/
+       Purpose: Submit rating and review for completed service
+       Used by: Rating and review system after service completion
+       Features: Rate providers, write reviews, feedback system
+
+GET    /api/marketplace/provider/<int:provider_id>/services/
+       Purpose: Get all services offered by specific provider for cart add-ons
+       Used by: Cart section, add-ons functionality, popular services
+       Features: Load provider services for cart add-ons, service recommendations
+
+==============================================
+SERVICE PROVIDER SPECIFIC APIs
+==============================================
+
+GET    /api/services/provider/registered/
+       Purpose: Get services registered by current provider
+       Used by: Provider dashboard, service management
+       Features: View registered services, manage service offerings
+
+POST   /api/services/provider/register/
+       Purpose: Register for new services
+       Used by: Service registration, expanding service offerings
+       Features: Add new services to provider profile
+
+DELETE /api/services/provider/unregister/
+       Purpose: Remove service from provider's offerings
+       Used by: Service management, removing unwanted services
+       Features: Unregister from services, update service list
+
+GET    /api/bookings/provider/
+       Purpose: Get all bookings for current provider
+       Used by: Provider dashboard, booking management
+       Features: View all provider bookings, track history
+
+GET    /api/bookings/provider/requests/
+       Purpose: Get pending booking requests for provider
+       Used by: Request management, incoming booking notifications
+       Features: View pending requests, manage incoming bookings
+
+POST   /api/bookings/<int:booking_id>/accept/
+       Purpose: Accept incoming booking request
+       Used by: Request management, booking confirmation
+       Features: Accept bookings, confirm service appointments
+
+POST   /api/bookings/<int:booking_id>/decline/
+       Purpose: Decline incoming booking request
+       Used by: Request management, booking rejection
+       Features: Decline unwanted bookings, manage capacity
+
+GET    /api/bookings/provider/<int:provider_id>/ratings/
+       Purpose: Get ratings and reviews for provider
+       Used by: Review management, reputation tracking
+       Features: View customer feedback, track ratings
+
+GET    /api/analytics/provider/dashboard/
+       Purpose: Get provider analytics and statistics
+       Used by: Provider dashboard, performance tracking
+       Features: Booking stats, completion rates, performance metrics
+
+GET    /api/analytics/provider/earnings/
+       Purpose: Get provider earnings and financial data
+       Used by: Earnings analytics, financial tracking
+       Features: Revenue tracking, payment history, earnings reports
+
+GET    /api/bookings/availability/
+       Purpose: Get provider's availability settings
+       Used by: Availability management, schedule viewing
+       Features: View current availability, time slot management
+
+POST   /api/bookings/availability/
+       Purpose: Update provider availability
+       Used by: Availability management, schedule updates
+       Features: Set available hours, update working schedule
+
+GET    /api/bookings/off-days/
+       Purpose: Get provider's off days and blocked dates
+       Used by: Availability management, calendar blocking
+       Features: View blocked dates, manage time off
+
+POST   /api/bookings/off-days/
+       Purpose: Add off days or block specific dates
+       Used by: Availability management, schedule blocking
+       Features: Block dates, set vacation time, manage availability
+
+GET    /api/marketplace/provider/<int:provider_id>/services/
+       Purpose: Get services offered by specific provider
+       Used by: Provider profile display, service listings
+       Features: Display provider's service portfolio
+
+==============================================
+ADMIN/PLATFORM PROVIDER SPECIFIC APIs
+==============================================
+
+GET    /api/platform_provider_dashboard/users/
+       Purpose: Get list of all platform users
+       Used by: User management, admin oversight
+       Features: View all users, manage user accounts
+
+GET    /api/platform_provider_dashboard/analytics/
+       Purpose: Get platform-wide analytics and statistics
+       Used by: Platform analytics, business intelligence
+       Features: Platform metrics, user growth, revenue tracking
+
+GET    /api/platform_provider_dashboard/permissions/
+       Purpose: Get user permissions and role information
+       Used by: Permission management, access control
+       Features: View user roles, manage permissions
+
+GET    /api/platform_provider_dashboard/user-type-role-permissions/
+       Purpose: Get detailed permission matrix for user types and roles
+       Used by: Advanced permission management
+       Features: Role-based access control, permission assignment
+
+POST   /api/platform_provider_dashboard/update-permissions/
+       Purpose: Update user permissions and roles
+       Used by: Permission management, access control updates
+       Features: Modify user permissions, assign roles
+
+GET    /api/user/permissions/
+       Purpose: Get current user's permissions
+       Used by: Permission checking, feature access control
+       Features: Verify user permissions, control UI elements
+
+==============================================
+DJANGO ADMIN INTERFACE APIs
+==============================================
+
+GET    /admin/
+       Purpose: Django admin main interface
+       Used by: Platform administrators and superusers
+       Features: Main admin dashboard, navigation to all models
+
+GET    /admin/login/
+       Purpose: Django admin login page
+       Used by: Administrators accessing admin interface
+       Features: Admin authentication form
+
+POST   /admin/login/
+       Purpose: Django admin login submission
+       Used by: Admin login process
+       Features: Authenticate admin users, session creation
+
+GET    /admin/logout/
+       Purpose: Django admin logout
+       Used by: Admin session termination
+       Features: Logout admin users, session cleanup
+
+GET    /admin/auth/user/
+       Purpose: User management in Django admin
+       Used by: User administration and management
+       Features: View, edit, delete users, manage permissions
+
+GET    /admin/bookings/booking/
+       Purpose: Booking management in Django admin
+       Used by: Booking administration and oversight
+       Features: View, edit, delete bookings, manage booking data
+
+GET    /admin/bookings/servicecategory/
+       Purpose: Service category management in Django admin
+       Used by: Service category administration
+       Features: View, edit, delete service categories, manage catalog
+
+GET    /admin/bookings/servicesubcategory/
+       Purpose: Service subcategory management in Django admin
+       Used by: Service subcategory administration
+       Features: View, edit, delete service subcategories, manage services
+
+==============================================
+TOTAL ACTIVE APIs: 40 ENDPOINTS
+==============================================
+
+API BREAKDOWN BY CATEGORY:
+- Main API Endpoints: 32 APIs
+- Django Admin Interface: 8 APIs
+
+API BREAKDOWN BY USER TYPE:
+- Authentication (All Users): 5 APIs
+- End-User Specific: 9 APIs
+- Service Provider Specific: 12 APIs
+- Admin/Platform Provider: 6 APIs
+- Django Admin Interface: 8 APIs
+
+==============================================
+API USAGE BY FEATURE
+==============================================
+
+REGISTRATION & LOGIN:
+- /api/auth/register/ (Registration)
+- /api/auth/login/ (Login)
+- /api/auth/forgot-password-clean/ (Password Reset)
+
+PROFILE MANAGEMENT:
+- /api/auth/me/ (View Profile)
+- /api/auth/me/update/ (Update Profile)
+
+SERVICE BROWSING & BOOKING:
+- /api/services/categories/ (Browse Categories)
+- /api/services/subcategories/ (Browse Subcategories)
+- /api/marketplace/service/<id>/providers/ (Find Providers)
+- /api/bookings/provider/<id>/available-slots/ (Check Availability)
+- /api/bookings/create-cart/ (Book Service)
+
+CART & ADD-ONS MANAGEMENT:
+- /api/bookings/create-cart/ (Create Cart Booking)
+- /api/marketplace/provider/<id>/services/ (Load Cart Add-ons)
+- localStorage (Cart Storage & Management)
+- cartUpdated Event (Cart State Management)
+
+BOOKING MANAGEMENT:
+- /api/bookings/user/ (Customer Bookings)
+- /api/bookings/provider/ (Provider Bookings)
+- /api/bookings/provider/requests/ (Pending Requests)
+- /api/bookings/<id>/accept/ (Accept Booking)
+- /api/bookings/<id>/decline/ (Decline Booking)
+- /api/bookings/<id>/cancel/ (Cancel Booking)
+
+SERVICE MANAGEMENT:
+- /api/services/provider/registered/ (View Services)
+- /api/services/provider/register/ (Add Service)
+- /api/services/provider/unregister/ (Remove Service)
+
+AVAILABILITY MANAGEMENT:
+- /api/bookings/availability/ (Manage Schedule)
+- /api/bookings/off-days/ (Manage Off Days)
+
+RATINGS & REVIEWS:
+- /api/bookings/rate-provider/ (Submit Rating)
+- /api/bookings/provider/<id>/ratings/ (View Ratings)
+
+ANALYTICS & REPORTING:
+- /api/analytics/provider/dashboard/ (Provider Stats)
+- /api/analytics/provider/earnings/ (Earnings Data)
+- /api/platform_provider_dashboard/analytics/ (Platform Stats)
+
+USER & PERMISSION MANAGEMENT:
+- /api/platform_provider_dashboard/users/ (User Management)
+- /api/platform_provider_dashboard/permissions/ (Permission Management)
+- /api/user/permissions/ (Check Permissions)
+
+DJANGO ADMIN INTERFACE:
+- /admin/ (Django Admin Main Interface)
+- /admin/login/ (Admin Login Page)
+- /admin/logout/ (Admin Logout)
+- /admin/auth/user/ (User Management)
+- /admin/bookings/booking/ (Booking Management)
+- /admin/bookings/servicecategory/ (Service Category Management)
+- /admin/bookings/servicesubcategory/ (Service Subcategory Management)
+
+==============================================
+API ARCHITECTURE & NOTES
+==============================================
+
+MAIN API ARCHITECTURE:
+- Primary APIs: /api/* (Modern, optimized endpoints)
+- Django Admin: /admin/* (Database management interface)
+
+AUTHENTICATION & SECURITY:
+1. JWT Bearer token authentication for all protected endpoints
+2. Permission-based access control with role verification
+3. User type and role-based API access restrictions
+4. CORS enabled for frontend integration
+5. Rate limiting and security measures implemented
+
+REQUEST/RESPONSE FORMAT:
+1. Content-Type: application/json for all requests
+2. Base URL: http://localhost:8000
+3. All APIs return JSON responses with consistent structure
+4. Error responses include appropriate HTTP status codes (400, 401, 403, 404, 500)
+5. Success responses include relevant data and status codes (200, 201, 204)
+
+API FEATURES:
+1. Real-time data updates and synchronization
+2. Comprehensive error handling and validation
+3. Pagination support for large datasets
+4. Filtering and search capabilities
+5. Bulk operations where applicable
+6. Transaction support for data integrity
+
+DJANGO ADMIN INTEGRATION:
+1. Full Django admin interface for database management
+2. User management and permissions through admin interface
+3. Direct access to all models and data
+4. Administrative tools for platform management
+
+PERMISSION SYSTEM:
+1. 25+ granular permissions across 7 categories
+2. Role-based permission assignment (End User, Service Provider, Platform Provider)
+3. User-specific permission overrides available
+4. Permission checking at API endpoint level
+5. Dynamic permission validation based on user context
+
+DATABASE INTEGRATION:
+1. PostgreSQL database with 11+ core tables
+2. Foreign key relationships and constraints enforced
+3. Transaction support for data consistency
+4. Optimized queries for performance
+5. Database connection pooling and management
+
+DEVELOPMENT & TESTING:
+1. Comprehensive API documentation available
+2. Test users and sample data provided
+3. API verification and testing tools included
+4. Development and production environment support
+5. Logging and monitoring capabilities
+
+SCALABILITY & PERFORMANCE:
+1. API-first architecture for scalability
+2. Efficient database queries and indexing
+3. Caching strategies for frequently accessed data
+4. Load balancing and horizontal scaling support
+5. Performance monitoring and optimization

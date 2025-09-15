@@ -10,7 +10,7 @@ from django.utils import timezone
 from bookings.models import Booking, ServiceSubcategory, UserRegisteredService, ProviderRating, ProviderAvailability, ProviderOffDay
 from bookings.serializers import (
     BookingSerializer, ProviderRatingSerializer, ProviderRatingCreateSerializer,
-    ProviderAvailabilitySerializer, ProviderAvailabilityCreateSerializer,
+    ProviderResponseSerializer, ProviderAvailabilitySerializer, ProviderAvailabilityCreateSerializer,
     ProviderOffDaySerializer, ProviderOffDayCreateSerializer
 )
 from authentication.views import PostgreSQLJWTAuthentication
@@ -965,6 +965,111 @@ def get_provider_ratings(request, provider_id):
             'total_reviews': total_reviews,
             'average_rating': average_rating,
             'ratings': serializer.data
+        }, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@authentication_classes([PostgreSQLJWTAuthentication])
+@permission_classes([IsAuthenticated])
+def respond_to_rating(request, rating_id):
+    """
+    Allow service providers to respond to customer reviews
+    POST /api/bookings/ratings/{rating_id}/respond/
+    Body: {
+        "response": "Thank you for your feedback! We're glad you were satisfied with our service."
+    }
+    """
+    try:
+        # Ensure user is a service provider
+        if request.user.user_type != 'Service Provider':
+            return Response(
+                {'error': 'Only service providers can respond to reviews'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Check if user has permission to respond to reviews
+        from authentication.models import UserPermissionOverride, Permission
+        try:
+            # First check if there's a specific override for this user
+            permission_obj = Permission.objects.get(codename='respond_to_reviews')
+            override = UserPermissionOverride.objects.filter(
+                user=request.user,
+                permission=permission_obj
+            ).first()
+
+            if override:
+                # User has a specific override
+                if not override.is_granted:
+                    return Response(
+                        {'error': 'You do not have permission to respond to reviews'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            else:
+                # Check default role-based permissions
+                from authentication.models import UserTypeRolePermission
+                role_permission = UserTypeRolePermission.objects.filter(
+                    user_type=request.user.user_type,
+                    role=request.user.role,
+                    permission=permission_obj
+                ).first()
+
+                if not role_permission or not role_permission.is_granted:
+                    return Response(
+                        {'error': 'You do not have permission to respond to reviews'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+
+        except Permission.DoesNotExist:
+            return Response(
+                {'error': 'Permission configuration error'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        # Validate request data
+        serializer = ProviderResponseSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {'error': serializer.errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        response_text = serializer.validated_data['response']
+
+        # Get the rating
+        try:
+            rating = ProviderRating.objects.get(
+                id=rating_id,
+                provider=request.user
+            )
+        except ProviderRating.DoesNotExist:
+            return Response(
+                {'error': 'Rating not found or you do not have permission to respond to it'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check if response already exists
+        if rating.provider_response:
+            return Response(
+                {'error': 'You have already responded to this review'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Update the rating with the response
+        rating.provider_response = response_text
+        rating.response_date = timezone.now()
+        rating.save()
+
+        # Return updated rating
+        rating_serializer = ProviderRatingSerializer(rating)
+        return Response({
+            'message': 'Response submitted successfully',
+            'rating': rating_serializer.data
         }, status=status.HTTP_200_OK)
 
     except Exception as e:

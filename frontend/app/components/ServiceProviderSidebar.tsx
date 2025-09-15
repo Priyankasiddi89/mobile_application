@@ -95,8 +95,8 @@ export default function ServiceProviderSidebar({ userPermissions = {} }: Service
           <SidebarNavItem label="Previous Bookings" icon="📚" onClick={() => router.push('/service_provider_dashboard/previous')} />
         )}
 
-        {/* Availability Management - Check manage_availability permission */}
-        {hasPermission('manage_availability') && (
+        {/* Availability - Check view_availability OR manage_availability permission */}
+        {(hasPermission('view_availability') || hasPermission('manage_availability')) && (
           <SidebarNavItem label="Availability" icon="📅" onClick={() => router.push('/service_provider_dashboard/availability')} />
         )}
 
@@ -105,9 +105,19 @@ export default function ServiceProviderSidebar({ userPermissions = {} }: Service
           <SidebarNavItem label="Ratings & Reviews" icon="⭐" onClick={() => router.push('/service_provider_dashboard/ratings')} />
         )}
 
+        {/* Analytics - Check view_analytics permission */}
+        {hasPermission('view_analytics') && (
+          <SidebarNavItem label="Analytics" icon="📊" onClick={() => router.push('/service_provider_dashboard/analytics')} />
+        )}
+
         {/* Earnings - Check view_earnings permission */}
         {hasPermission('view_earnings') && (
           <SidebarNavItem label="Earnings" icon="💰" onClick={() => router.push('/service_provider_dashboard/earnings')} />
+        )}
+
+        {/* Payments - Check request_payments permission */}
+        {hasPermission('request_payments') && (
+          <SidebarNavItem label="Payment Requests" icon="💳" onClick={() => router.push('/service_provider_dashboard/payments')} />
         )}
 
         {/* Logout - Always visible */}

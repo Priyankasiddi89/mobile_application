@@ -1,0 +1,157 @@
+HOME SERVICES PLATFORM - ACTIVE API ENDPOINTS
+==============================================
+
+BASE URL: http://localhost:8000
+
+==============================================
+MAIN API ENDPOINTS (/api/) - ACTIVELY USED
+==============================================
+
+AUTHENTICATION APIs
+--------------------
+POST   /api/auth/register/
+POST   /api/auth/login/
+POST   /api/auth/forgot-password-clean/
+GET    /api/auth/me/
+PUT    /api/auth/me/update/
+
+SERVICES APIs
+-------------
+GET    /api/services/categories/
+GET    /api/services/subcategories/
+GET    /api/services/provider/registered/
+
+BOOKINGS APIs
+-------------
+POST   /api/bookings/create-cart/
+GET    /api/bookings/user/
+GET    /api/bookings/provider/
+GET    /api/bookings/provider/requests/
+POST   /api/bookings/<int:booking_id>/accept/
+POST   /api/bookings/<int:booking_id>/decline/
+GET    /api/bookings/provider/<int:provider_id>/ratings/
+GET    /api/bookings/availability/
+POST   /api/bookings/availability/
+GET    /api/bookings/off-days/
+POST   /api/bookings/off-days/
+GET    /api/bookings/provider/<int:provider_id>/available-slots/
+
+USER PERMISSIONS APIs
+---------------------
+GET    /api/user/permissions/
+
+ANALYTICS APIs
+--------------
+GET    /api/analytics/provider/dashboard/
+GET    /api/analytics/provider/earnings/
+
+MARKETPLACE APIs
+----------------
+GET    /api/marketplace/service/<int:service_id>/providers/
+GET    /api/marketplace/provider/<int:provider_id>/services/
+
+PLATFORM PROVIDER DASHBOARD APIs
+---------------------------------
+GET    /api/platform_provider_dashboard/users/
+GET    /api/platform_provider_dashboard/analytics/
+GET    /api/platform_provider_dashboard/permissions/
+GET    /api/platform_provider_dashboard/user-type-role-permissions/
+POST   /api/platform_provider_dashboard/update-permissions/
+
+==============================================
+ADMIN INTERFACE (DJANGO ADMIN)
+==============================================
+
+DJANGO ADMIN
+------------
+GET    /admin/
+GET    /admin/login/
+POST   /admin/login/
+GET    /admin/logout/
+GET    /admin/auth/user/
+GET    /admin/bookings/booking/
+GET    /admin/bookings/servicecategory/
+GET    /admin/bookings/servicesubcategory/
+
+==============================================
+TOTAL ACTIVE API COUNT
+==============================================
+
+Main APIs: 31 endpoints
+Admin APIs: 8 endpoints
+Total: 39 API endpoints
+
+==============================================
+API METHODS BREAKDOWN
+==============================================
+
+GET:    25 endpoints
+POST:   13 endpoints
+PUT:    1 endpoint
+
+==============================================
+REMOVED UNUSED APIs
+==============================================
+
+The following APIs were removed as they are not being used in the frontend:
+
+AUTHENTICATION (REMOVED):
+- POST /api/auth/logout/
+- GET /api/auth/profile/
+- GET /api/auth/users/
+- POST /api/auth/forgot-password/
+
+SERVICES (REMOVED):
+- GET /api/services/categories/<int:category_id>/services/
+- GET /api/services/provider/available/
+- POST /api/services/provider/register/
+- DELETE /api/services/provider/unregister/
+
+BOOKINGS (REMOVED):
+- POST /api/bookings/create/
+- PUT /api/bookings/<int:booking_id>/status/
+- POST /api/bookings/<int:booking_id>/complete/
+- DELETE /api/bookings/<int:booking_id>/cancel/
+- DELETE /api/bookings/<int:booking_id>/delete/
+- POST /api/bookings/rate-provider/
+- POST /api/bookings/ratings/<int:rating_id>/respond/
+- DELETE /api/bookings/availability/
+- DELETE /api/bookings/off-days/
+
+ANALYTICS (REMOVED):
+- GET /api/analytics/customer/dashboard/
+- GET /api/analytics/platform/
+
+MARKETPLACE (REMOVED):
+- POST /api/marketplace/register-service/
+- POST /api/marketplace/book-provider/
+- POST /api/marketplace/rate-provider/
+- GET /api/marketplace/provider/<int:provider_id>/profile/
+- PUT /api/marketplace/provider/<int:provider_id>/availability/
+
+PLATFORM PROVIDER DASHBOARD (REMOVED):
+- GET /api/platform_provider_dashboard/profile/
+- GET /api/platform_provider_dashboard/services/
+- PUT /api/platform_provider_dashboard/user-type-role-permissions/
+
+ALL LEGACY ENDPOINTS (REMOVED):
+- 28 legacy endpoints under /legacy/ path
+
+==============================================
+AUTHENTICATION
+==============================================
+
+Type: JWT Bearer Token
+Header: Authorization: Bearer <token>
+Token Expiry: 60 minutes
+Content-Type: application/json
+
+==============================================
+STATUS
+==============================================
+
+All APIs are functional and tested
+Database: PostgreSQL
+Framework: Django REST Framework
+Frontend: Next.js TypeScript
+Documentation: Complete API specification available

@@ -107,6 +107,8 @@ class ProviderRatingSerializer(serializers.Serializer):
     booking_id = serializers.SerializerMethodField()
     rating = serializers.IntegerField()
     review = serializers.CharField(allow_blank=True)
+    provider_response = serializers.CharField(allow_blank=True)
+    response_date = serializers.DateTimeField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
 
     def get_id(self, obj):
@@ -124,6 +126,16 @@ class ProviderRatingCreateSerializer(serializers.Serializer):
         if value < 1 or value > 5:
             raise serializers.ValidationError("Rating must be between 1 and 5")
         return value
+
+class ProviderResponseSerializer(serializers.Serializer):
+    response = serializers.CharField(max_length=1000)
+
+    def validate_response(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Response cannot be empty")
+        if len(value.strip()) < 10:
+            raise serializers.ValidationError("Response must be at least 10 characters long")
+        return value.strip()
 
 
 class ProviderAvailabilitySerializer(serializers.Serializer):

@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import ServiceCategory, ServiceSubcategory, Booking, UserRegisteredService, ProviderRating
+from .models import (
+    ServiceCategory, ServiceSubcategory, Booking, UserRegisteredService,
+    ProviderRating, ProviderAvailability, ProviderOffDay
+)
 
 # Customize admin site headers
 admin.site.site_header = "Home Services Platform Administration"
@@ -36,16 +39,22 @@ class BookingAdmin(admin.ModelAdmin):
             'fields': ('customer', 'provider', 'subcategory', 'status')
         }),
         ('Service Details', {
-            'fields': ('booking_date', 'service_date', 'notes')
+            'fields': ('booking_date', 'service_date', 'notes', 'address')
         }),
         ('Payment Info', {
             'fields': ('total_price', 'payment_status', 'payment_method')
         }),
+        ('Cancellation Info', {
+            'fields': ('cancelled_by', 'cancellation_reason'),
+            'classes': ('collapse',)
+        }),
         ('Advanced', {
-            'fields': ('declined_by',),
+            'fields': ('declined_by', 'created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
     )
+
+    readonly_fields = ('created_at', 'updated_at')
 
     # Make it easier to find related objects
     autocomplete_fields = ['subcategory']
@@ -69,3 +78,47 @@ class ProviderRatingAdmin(admin.ModelAdmin):
 
     # Show related details
     autocomplete_fields = ['provider', 'customer', 'booking']
+
+
+@admin.register(ProviderAvailability)
+class ProviderAvailabilityAdmin(admin.ModelAdmin):
+    list_display = ('provider', 'date', 'start_time', 'end_time', 'is_available', 'created_at')
+    list_filter = ('is_available', 'date', 'created_at')
+    search_fields = ('provider__username',)
+    ordering = ('-date', 'start_time')
+
+    autocomplete_fields = ['provider']
+
+    fieldsets = (
+        ('Availability Details', {
+            'fields': ('provider', 'date', 'start_time', 'end_time', 'is_available')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(ProviderOffDay)
+class ProviderOffDayAdmin(admin.ModelAdmin):
+    list_display = ('provider', 'date', 'reason', 'created_at')
+    list_filter = ('date', 'created_at')
+    search_fields = ('provider__username', 'reason')
+    ordering = ('-date',)
+
+    autocomplete_fields = ['provider']
+
+    fieldsets = (
+        ('Off Day Details', {
+            'fields': ('provider', 'date', 'reason')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at',),
+            'classes': ('collapse',)
+        }),
+    )
+
+    readonly_fields = ('created_at',)

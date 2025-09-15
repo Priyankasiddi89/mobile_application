@@ -9,6 +9,12 @@ interface User {
   user_type: string;
   role: string;
   is_active: boolean;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+  address?: string;
+  bio?: string;
 }
 
 export default function AdminDashboardCatchAll() {
@@ -88,64 +94,203 @@ export default function AdminDashboardCatchAll() {
 }
 
 function ProfileSection({ user }: { user: User }) {
+  const [profileData, setProfileData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      const token = localStorage.getItem("access_token");
+      if (!token) return;
+
+      try {
+        const response = await fetch("http://localhost:8000/api/auth/me/", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setProfileData(data);
+        }
+      } catch (error) {
+        console.error("Error fetching profile:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
+  if (loading) {
+    return (
+      <div style={{ background: 'white', borderRadius: 16, padding: 60, maxWidth: 800, margin: '40px auto', boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)', textAlign: 'center' }}>
+        <div style={{ fontSize: 48, marginBottom: 20 }}>⏳</div>
+        <div style={{ fontSize: 20, color: '#667eea', fontWeight: 600 }}>Loading profile...</div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ background: 'white', borderRadius: 16, padding: 32, maxWidth: 500, margin: '40px auto', boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)' }}>
-      <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 24, color: '#2c3e50' }}>Profile Information</h2>
+    <div style={{ background: 'white', borderRadius: 16, padding: 32, maxWidth: 800, margin: '40px auto', boxShadow: '0 4px 24px rgba(44, 62, 80, 0.08)' }}>
+      <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: 30, color: '#2c3e50', textAlign: 'center' }}>🛡️ Platform Administrator Profile</h2>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
-          <strong style={{ color: '#495057' }}>Username:</strong>
-          <div style={{ marginTop: 4, color: '#2c3e50' }}>{user.username}</div>
-        </div>
-
-        <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
-          <strong style={{ color: '#495057' }}>User Type:</strong>
-          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{
-              background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-              color: 'white',
-              padding: '6px 12px',
-              borderRadius: 8,
-              fontSize: '14px',
-              fontWeight: 600
-            }}>
-              {user.user_type}
-            </span>
+      <div style={{ display: 'grid', gap: '24px' }}>
+        {/* Personal Information Section */}
+        <div style={{
+          background: '#f8f9fa',
+          borderRadius: '12px',
+          padding: '20px',
+          border: '2px solid #e9ecef'
+        }}>
+          <h4 style={{
+            margin: '0 0 16px 0',
+            color: '#495057',
+            fontSize: '1.1rem',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}>
+            👤 Personal Information
+          </h4>
+          <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
+            <div>
+              <strong style={{ color: '#6c757d' }}>Username:</strong>
+              <div style={{ marginTop: 4, color: '#2c3e50' }}>{profileData?.username || user.username}</div>
+            </div>
+            {profileData?.email && (
+              <div>
+                <strong style={{ color: '#6c757d' }}>Email:</strong>
+                <div style={{ marginTop: 4, color: '#2c3e50' }}>{profileData.email}</div>
+              </div>
+            )}
+            {(profileData?.first_name || profileData?.last_name) && (
+              <div>
+                <strong style={{ color: '#6c757d' }}>Full Name:</strong>
+                <div style={{ marginTop: 4, color: '#2c3e50' }}>
+                  {[profileData?.first_name, profileData?.last_name].filter(Boolean).join(' ') || 'Not provided'}
+                </div>
+              </div>
+            )}
+            {profileData?.phone && (
+              <div>
+                <strong style={{ color: '#6c757d' }}>Phone:</strong>
+                <div style={{ marginTop: 4, color: '#2c3e50' }}>{profileData.phone}</div>
+              </div>
+            )}
+            {profileData?.address && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <strong style={{ color: '#6c757d' }}>Address:</strong>
+                <div style={{ marginTop: 4, color: '#2c3e50' }}>{profileData.address}</div>
+              </div>
+            )}
           </div>
         </div>
 
-        <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
-          <strong style={{ color: '#495057' }}>Role:</strong>
-          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{
-              background: '#28a745',
-              color: 'white',
-              padding: '6px 12px',
-              borderRadius: 8,
-              fontSize: '14px',
-              fontWeight: 600
-            }}>
-              {user.role}
-            </span>
-            <span style={{ fontSize: '12px', color: '#6c757d', fontStyle: 'italic' }}>
-              (Determines permissions)
-            </span>
+        {/* Administrative Information Section */}
+        <div style={{
+          background: '#f8f9fa',
+          borderRadius: '12px',
+          padding: '20px',
+          border: '2px solid #e9ecef'
+        }}>
+          <h4 style={{
+            margin: '0 0 16px 0',
+            color: '#495057',
+            fontSize: '1.1rem',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}>
+            🏷️ Administrative Details
+          </h4>
+          <div style={{ display: 'grid', gap: '12px', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
+            <div>
+              <strong style={{ color: '#6c757d' }}>User Type:</strong>
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{
+                  background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                  color: 'white',
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  fontSize: '14px',
+                  fontWeight: 600
+                }}>
+                  {profileData?.user_type || user.user_type}
+                </span>
+              </div>
+            </div>
+            <div>
+              <strong style={{ color: '#6c757d' }}>Role:</strong>
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{
+                  background: '#28a745',
+                  color: 'white',
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  fontSize: '14px',
+                  fontWeight: 600
+                }}>
+                  {profileData?.role || user.role}
+                </span>
+                <span style={{ fontSize: '12px', color: '#6c757d', fontStyle: 'italic' }}>
+                  (Determines permissions)
+                </span>
+              </div>
+            </div>
+            <div>
+              <strong style={{ color: '#6c757d' }}>Account Status:</strong>
+              <div style={{ marginTop: 8 }}>
+                <span style={{
+                  background: (profileData?.is_active ?? user.is_active) ? '#28a745' : '#dc3545',
+                  color: 'white',
+                  padding: '6px 12px',
+                  borderRadius: 8,
+                  fontWeight: 600
+                }}>
+                  {(profileData?.is_active ?? user.is_active) ? 'Active' : 'Inactive'}
+                </span>
+              </div>
+            </div>
+            <div>
+              <strong style={{ color: '#6c757d' }}>User ID:</strong>
+              <div style={{ marginTop: 4, color: '#2c3e50' }}>{profileData?.id || user.id}</div>
+            </div>
           </div>
         </div>
 
-        <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
-          <strong style={{ color: '#495057' }}>Status:</strong>
-          <div style={{ marginTop: 8 }}>
-            <span style={{
-              background: user.is_active ? '#28a745' : '#dc3545',
-              color: 'white',
-              padding: '6px 12px',
-              borderRadius: 8,
-              fontSize: '14px',
-              fontWeight: 600
-            }}>
-              {user.is_active ? 'Active' : 'Inactive'}
-            </span>
+        {/* Platform Access Information */}
+        <div style={{
+          background: '#e8f5e8',
+          borderRadius: '12px',
+          padding: '20px',
+          border: '2px solid #c3e6cb'
+        }}>
+          <h4 style={{
+            margin: '0 0 16px 0',
+            color: '#155724',
+            fontSize: '1.1rem',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8
+          }}>
+            🔐 Platform Access
+          </h4>
+          <div style={{ color: '#155724' }}>
+            <p style={{ margin: '0 0 8px 0' }}>
+              ✅ <strong>Full Administrative Access</strong>
+            </p>
+            <p style={{ margin: '0 0 8px 0' }}>
+              ✅ User Management & Permissions
+            </p>
+            <p style={{ margin: '0 0 8px 0' }}>
+              ✅ Platform Analytics & Reports
+            </p>
+            <p style={{ margin: '0' }}>
+              ✅ System Configuration & Settings
+            </p>
           </div>
         </div>
       </div>

@@ -126,6 +126,8 @@ class ProviderRating(models.Model):
     booking = models.OneToOneField('Booking', on_delete=models.CASCADE, related_name='rating')
     rating = models.IntegerField(choices=[(i, i) for i in range(1, 6)], help_text="Rating from 1 to 5 stars")
     review = models.TextField(blank=True, help_text="Customer's review of the service")
+    provider_response = models.TextField(blank=True, help_text="Provider's response to the review")
+    response_date = models.DateTimeField(null=True, blank=True, help_text="When the provider responded")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

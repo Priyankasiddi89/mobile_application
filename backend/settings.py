@@ -176,3 +176,25 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+
+# Email settings - REAL EMAIL SENDING
+import os
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+
+# Gmail SMTP Configuration - UPDATE WITH YOUR CREDENTIALS
+EMAIL_HOST_USER = 'priyankasiddi89@gmail.com'  # Replace with your actual Gmail
+EMAIL_HOST_PASSWORD = 'cewzwvlxsnsouuki'  # Replace with your App Password
+
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+SERVER_EMAIL = EMAIL_HOST_USER
+
+# Email timeout settings
+EMAIL_TIMEOUT = 30
+
+# Force SMTP backend for real email sending
+# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'  # Disabled
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'  # Force SMTP

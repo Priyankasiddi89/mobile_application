@@ -10,6 +10,12 @@ interface User {
   user_type: string;
   role: string;
   is_active: boolean;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+  address?: string;
+  bio?: string;
 }
 
 interface UserPermissions {
@@ -551,6 +557,11 @@ function ProfileSection({ user, hasPermission }: { user: User; hasPermission: (p
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
     username: user.username,
+    email: user.email || '',
+    first_name: user.first_name || '',
+    last_name: user.last_name || '',
+    phone: user.phone || '',
+    address: user.address || '',
     oldPassword: '',
     newPassword: '',
     confirmPassword: ''
@@ -601,7 +612,12 @@ function ProfileSection({ user, hasPermission }: { user: User; hasPermission: (p
       }
 
       const updateData: any = {
-        username: editForm.username.trim()
+        username: editForm.username.trim(),
+        email: editForm.email.trim(),
+        first_name: editForm.first_name.trim(),
+        last_name: editForm.last_name.trim(),
+        phone: editForm.phone.trim(),
+        address: editForm.address.trim()
       };
 
       // Only include password fields if user wants to change password
@@ -634,6 +650,11 @@ function ProfileSection({ user, hasPermission }: { user: User; hasPermission: (p
         setShowPasswordFields(false);
         setEditForm({
           username: updatedUser.username,
+          email: updatedUser.email || '',
+          first_name: updatedUser.first_name || '',
+          last_name: updatedUser.last_name || '',
+          phone: updatedUser.phone || '',
+          address: updatedUser.address || '',
           oldPassword: '',
           newPassword: '',
           confirmPassword: ''
@@ -667,6 +688,11 @@ function ProfileSection({ user, hasPermission }: { user: User; hasPermission: (p
     setShowPasswordFields(false);
     setEditForm({
       username: user.username,
+      email: user.email || '',
+      first_name: user.first_name || '',
+      last_name: user.last_name || '',
+      phone: user.phone || '',
+      address: user.address || '',
       oldPassword: '',
       newPassword: '',
       confirmPassword: ''
@@ -765,55 +791,181 @@ function ProfileSection({ user, hasPermission }: { user: User; hasPermission: (p
       {!isEditing ? (
         // View Mode
         <div style={{ display: 'grid', gap: '16px' }}>
-          <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
-            <strong>Username:</strong> {user.username}
-          </div>
-          <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
-            <strong>User Type:</strong>
-            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{
-                background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-                color: 'white',
-                padding: '6px 12px',
-                borderRadius: 8,
-                fontSize: '14px',
-                fontWeight: 600
-              }}>
-                {user.user_type}
-              </span>
+          {/* Personal Information Section */}
+          <div style={{
+            background: '#f8f9fa',
+            borderRadius: '12px',
+            padding: '20px',
+            border: '2px solid #e9ecef'
+          }}>
+            <h4 style={{
+              margin: '0 0 16px 0',
+              color: '#495057',
+              fontSize: '1.1rem',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}>
+              👤 Personal Information
+            </h4>
+            <div style={{ display: 'grid', gap: '12px' }}>
+              <div>
+                <strong style={{ color: '#6c757d' }}>Username:</strong>
+                <div style={{ marginTop: 4, color: '#2c3e50' }}>{user.username}</div>
+              </div>
+              {user.email && (
+                <div>
+                  <strong style={{ color: '#6c757d' }}>Email:</strong>
+                  <div style={{ marginTop: 4, color: '#2c3e50' }}>{user.email}</div>
+                </div>
+              )}
+              {(user.first_name || user.last_name) && (
+                <div>
+                  <strong style={{ color: '#6c757d' }}>Full Name:</strong>
+                  <div style={{ marginTop: 4, color: '#2c3e50' }}>
+                    {[user.first_name, user.last_name].filter(Boolean).join(' ') || 'Not provided'}
+                  </div>
+                </div>
+              )}
+              {user.phone && (
+                <div>
+                  <strong style={{ color: '#6c757d' }}>Phone:</strong>
+                  <div style={{ marginTop: 4, color: '#2c3e50' }}>{user.phone}</div>
+                </div>
+              )}
+              {user.address && (
+                <div>
+                  <strong style={{ color: '#6c757d' }}>Address:</strong>
+                  <div style={{ marginTop: 4, color: '#2c3e50' }}>{user.address}</div>
+                </div>
+              )}
             </div>
           </div>
-          <div style={{ padding: '16px', background: '#f8f9fa', borderRadius: '8px' }}>
-            <strong>Role:</strong>
-            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{
-                background: '#28a745',
-                color: 'white',
-                padding: '6px 12px',
-                borderRadius: 8,
-                fontSize: '14px',
-                fontWeight: 600
-              }}>
-                {user.role}
-              </span>
-              <span style={{ fontSize: '12px', color: '#6c757d', fontStyle: 'italic' }}>
-                (Determines permissions)
-              </span>
+
+          {/* Account Information Section */}
+          <div style={{
+            background: '#f8f9fa',
+            borderRadius: '12px',
+            padding: '20px',
+            border: '2px solid #e9ecef'
+          }}>
+            <h4 style={{
+              margin: '0 0 16px 0',
+              color: '#495057',
+              fontSize: '1.1rem',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}>
+              🏷️ Account Details
+            </h4>
+            <div style={{ display: 'grid', gap: '12px' }}>
+              <div>
+                <strong style={{ color: '#6c757d' }}>User Type:</strong>
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                    color: 'white',
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    fontSize: '14px',
+                    fontWeight: 600
+                  }}>
+                    {user.user_type}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <strong style={{ color: '#6c757d' }}>Role:</strong>
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    background: '#28a745',
+                    color: 'white',
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    fontSize: '14px',
+                    fontWeight: 600
+                  }}>
+                    {user.role}
+                  </span>
+                  <span style={{ fontSize: '12px', color: '#6c757d', fontStyle: 'italic' }}>
+                    (Determines permissions)
+                  </span>
+                </div>
+              </div>
+              <div>
+                <strong style={{ color: '#6c757d' }}>Account Status:</strong>
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    background: user.is_active ? '#28a745' : '#dc3545',
+                    color: 'white',
+                    padding: '6px 12px',
+                    borderRadius: 8,
+                    fontSize: '14px',
+                    fontWeight: 600
+                  }}>
+                    {user.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       ) : (
         // Edit Mode
-        <form onSubmit={handleEditSubmit} style={{ display: 'grid', gap: '20px' }}>
-          {/* Username Field */}
+        <form onSubmit={handleEditSubmit} style={{ display: 'grid', gap: '24px' }}>
+          {/* Personal Information Section */}
+          <div style={{
+            background: '#f8f9fa',
+            borderRadius: '12px',
+            padding: '20px',
+            border: '2px solid #e9ecef'
+          }}>
+            <h4 style={{
+              margin: '0 0 20px 0',
+              color: '#495057',
+              fontSize: '1.1rem',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}>
+              👤 Personal Information
+            </h4>
+            <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
+              {/* Username Field */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#2c3e50' }}>
+                  Username:
+                </label>
+                <input
+                  type="text"
+                  value={editForm.username}
+                  onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: 8,
+                border: '2px solid #e9ecef',
+                fontSize: '1rem',
+                transition: 'border-color 0.3s ease'
+              }}
+              onFocus={(e) => e.target.style.borderColor = '#667eea'}
+              onBlur={(e) => e.target.style.borderColor = '#e9ecef'}
+            />
+          </div>
+
+          {/* Email Field */}
           <div>
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#2c3e50' }}>
-              Username:
+              Email:
             </label>
             <input
-              type="text"
-              value={editForm.username}
-              onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
+              type="email"
+              value={editForm.email}
+              onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
               style={{
                 width: '100%',
                 padding: '12px',
@@ -827,45 +979,156 @@ function ProfileSection({ user, hasPermission }: { user: User; hasPermission: (p
             />
           </div>
 
-          {/* Read-only fields */}
+          {/* First Name Field */}
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#6c757d' }}>
-              User Type:
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#2c3e50' }}>
+              First Name:
             </label>
             <input
               type="text"
-              value={user.user_type}
-              disabled
+              value={editForm.first_name}
+              onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
               style={{
                 width: '100%',
                 padding: '12px',
                 borderRadius: 8,
                 border: '2px solid #e9ecef',
                 fontSize: '1rem',
-                background: '#f8f9fa',
-                color: '#6c757d'
+                transition: 'border-color 0.3s ease'
               }}
+              onFocus={(e) => e.target.style.borderColor = '#667eea'}
+              onBlur={(e) => e.target.style.borderColor = '#e9ecef'}
             />
           </div>
 
+          {/* Last Name Field */}
           <div>
-            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#6c757d' }}>
-              Role:
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#2c3e50' }}>
+              Last Name:
             </label>
             <input
               type="text"
-              value={user.role}
-              disabled
+              value={editForm.last_name}
+              onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
               style={{
                 width: '100%',
                 padding: '12px',
                 borderRadius: 8,
                 border: '2px solid #e9ecef',
                 fontSize: '1rem',
-                background: '#f8f9fa',
-                color: '#6c757d'
+                transition: 'border-color 0.3s ease'
               }}
+              onFocus={(e) => e.target.style.borderColor = '#667eea'}
+              onBlur={(e) => e.target.style.borderColor = '#e9ecef'}
             />
+          </div>
+
+          {/* Phone Field */}
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#2c3e50' }}>
+              Phone:
+            </label>
+            <input
+              type="tel"
+              value={editForm.phone}
+              onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: 8,
+                border: '2px solid #e9ecef',
+                fontSize: '1rem',
+                transition: 'border-color 0.3s ease'
+              }}
+              onFocus={(e) => e.target.style.borderColor = '#667eea'}
+              onBlur={(e) => e.target.style.borderColor = '#e9ecef'}
+            />
+          </div>
+
+          {/* Address Field */}
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#2c3e50' }}>
+              Address:
+            </label>
+            <textarea
+              value={editForm.address}
+              onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+              rows={3}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: 8,
+                border: '2px solid #e9ecef',
+                fontSize: '1rem',
+                transition: 'border-color 0.3s ease',
+                resize: 'vertical'
+              }}
+              onFocus={(e) => e.target.style.borderColor = '#667eea'}
+              onBlur={(e) => e.target.style.borderColor = '#e9ecef'}
+            />
+          </div>
+            </div>
+          </div>
+
+          {/* Account Information Section (Read-only) */}
+          <div style={{
+            background: '#f8f9fa',
+            borderRadius: '12px',
+            padding: '20px',
+            border: '2px solid #e9ecef'
+          }}>
+            <h4 style={{
+              margin: '0 0 20px 0',
+              color: '#495057',
+              fontSize: '1.1rem',
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8
+            }}>
+              🏷️ Account Details (Read-only)
+            </h4>
+            <div style={{ display: 'grid', gap: '16px', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#6c757d' }}>
+                  User Type:
+                </label>
+                <input
+                  type="text"
+                  value={user.user_type}
+                  disabled
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: 8,
+                    border: '2px solid #e9ecef',
+                    fontSize: '1rem',
+                    background: '#f8f9fa',
+                    color: '#6c757d'
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600, color: '#6c757d' }}>
+                  Role:
+                </label>
+                <input
+                  type="text"
+                  value={user.role}
+                  disabled
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: 8,
+                    border: '2px solid #e9ecef',
+                    fontSize: '1rem',
+                    background: '#f8f9fa',
+                    color: '#6c757d'
+                  }}
+                />
+              </div>
+            </div>
           </div>
 
           {/* Password Change Section */}
@@ -1466,6 +1729,14 @@ const parseBookingNotes = (notes: string) => {
       const serviceCount = parseInt(cartMatch[1]);
       result.isMultiService = serviceCount > 1; // Only multi if more than 1 service
       result.serviceCount = serviceCount;
+    } else {
+      // Check for single service booking format
+      const singleMatch = notes.match(/Single service booking: ([^\n\r]+)/);
+      if (singleMatch) {
+        result.isMultiService = false;
+        result.serviceCount = 1;
+        result.servicesList = [singleMatch[1].trim()];
+      }
     }
   }
 
@@ -1475,7 +1746,7 @@ const parseBookingNotes = (notes: string) => {
     result.description = descriptionMatch[1].trim();
   }
 
-  // Extract address - try multiple patterns
+  // Extract address - try multiple patterns and clean up
   let addressMatch = notes.match(/Address: ([^\n\r]+)/);
   if (!addressMatch) {
     // Try alternative patterns
@@ -1490,7 +1761,11 @@ const parseBookingNotes = (notes: string) => {
     addressMatch = notes.match(/Address:\s*([^,\n\r]+?)(?:\s+Description:|$)/);
   }
   if (addressMatch) {
-    result.address = addressMatch[1].trim();
+    let address = addressMatch[1].trim();
+    // Clean up address by removing time slot information that might be appended
+    address = address.replace(/\s+Time Slot:.*$/i, '');
+    address = address.replace(/\s+Description:.*$/i, '');
+    result.address = address.trim();
   }
 
   // Extract time slot - try multiple patterns including time ranges
@@ -1501,6 +1776,10 @@ const parseBookingNotes = (notes: string) => {
   if (!timeMatch) {
     // Look for time ranges like "3pm-6pm", "3:00pm-6:00pm", "3 PM - 6 PM"
     timeMatch = notes.match(/(\d{1,2}(?::\d{2})?\s*(?:am|pm)\s*[-–]\s*\d{1,2}(?::\d{2})?\s*(?:am|pm))/i);
+  }
+  if (!timeMatch) {
+    // Look for simple number ranges like "9-12", "9 - 12"
+    timeMatch = notes.match(/(\d{1,2}\s*[-–]\s*\d{1,2})/);
   }
   if (!timeMatch) {
     // Look for single times like "at 11:32 PM"
@@ -2164,21 +2443,30 @@ function RequestsSection({ user, hasPermission }: { user: User; hasPermission: (
                   📅 {new Date(request.service_date).toLocaleDateString()}
                 </span>
                 {(() => {
-                  // Extract time from service_date or notes
+                  // Extract time from notes first, then fallback to service_date
                   let timeSlot = '';
 
-                  // First try to get time from service_date if it includes time
-                  const serviceDate = new Date(request.service_date);
-                  const hours = serviceDate.getHours();
-                  const minutes = serviceDate.getMinutes();
+                  // Debug: Log the notes content to see what's available
+                  console.log('Request notes for time extraction:', request.notes);
 
-                  // If service_date has meaningful time (not just 00:00), use it
-                  if (hours !== 0 || minutes !== 0) {
-                    timeSlot = serviceDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                  } else {
-                    // Try to extract time from notes using enhanced parser
-                    const bookingData = parseBookingNotes(request.notes || '');
+                  // First try to extract time from notes using enhanced parser (PRIORITY)
+                  const bookingData = parseBookingNotes(request.notes || '');
+                  console.log('Parsed booking data:', bookingData);
+
+                  if (bookingData.timeSlot) {
                     timeSlot = bookingData.timeSlot;
+                    console.log('Using time from notes:', timeSlot);
+                  } else {
+                    // Fallback to service_date time only if notes don't contain time
+                    const serviceDate = new Date(request.service_date);
+                    const hours = serviceDate.getHours();
+                    const minutes = serviceDate.getMinutes();
+
+                    // Only use service_date time if it has meaningful time (not just 00:00)
+                    if (hours !== 0 || minutes !== 0) {
+                      timeSlot = serviceDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                      console.log('Using time from service_date:', timeSlot);
+                    }
                   }
 
                   return timeSlot ? (
@@ -2221,7 +2509,7 @@ function RequestsSection({ user, hasPermission }: { user: User; hasPermission: (
                       padding: '3px 8px',
                       borderRadius: '8px',
                       fontWeight: 600,
-                      maxWidth: '200px',
+                      maxWidth: '300px', // Increased from 200px to 300px
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
                       whiteSpace: 'nowrap'
@@ -2715,19 +3003,28 @@ function RequestsSection({ user, hasPermission }: { user: User; hasPermission: (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: '#6c757d' }}>Service Date:</span>
                     <span style={{ fontWeight: '600', color: '#495057' }}>
-                      {formatDate(selectedInvoice.service_date)} at {(() => {
-                        // Smart time extraction for invoice
+                      {new Date(selectedInvoice.service_date).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#6c757d' }}>Service Time:</span>
+                    <span style={{ fontWeight: '600', color: '#495057' }}>
+                      {(() => {
+                        // Smart time extraction for invoice - prioritize notes over service_date
+                        const bookingData = parseBookingNotes(selectedInvoice.notes || '');
+                        if (bookingData.timeSlot) {
+                          return bookingData.timeSlot;
+                        }
+
+                        // Fallback to service_date time only if it has meaningful time
                         const serviceDate = new Date(selectedInvoice.service_date);
                         const hours = serviceDate.getHours();
                         const minutes = serviceDate.getMinutes();
 
-                        // If service_date has meaningful time (not just 00:00), use it
                         if (hours !== 0 || minutes !== 0) {
                           return serviceDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
                         } else {
-                          // Try to extract time from notes using enhanced parser
-                          const bookingData = parseBookingNotes(selectedInvoice.notes || '');
-                          return bookingData.timeSlot || 'Not specified';
+                          return 'Not specified';
                         }
                       })()}
                     </span>
@@ -3945,9 +4242,18 @@ function CartSection({ user }: { user: User }) {
             const servicesList = cartItems.map(item => item.subcategory_name).join(', ');
 
             // Create comprehensive notes with address and time
-            let notes = `Multi-service booking with ${cartItems.length} services`;
-            notes += ` Services included: ${servicesList}`;
-            notes += ` Total services: ${cartItems.length}`;
+            let notes = '';
+
+            if (cartItems.length === 1) {
+              // Single service booking
+              notes = `Single service booking: ${servicesList}`;
+            } else {
+              // Multi-service booking
+              notes = `Multi-service booking with ${cartItems.length} services`;
+              notes += ` Services included: ${servicesList}`;
+              notes += ` Total services: ${cartItems.length}`;
+            }
+
             if (address) {
               notes += ` Address: ${address}`;
             }
